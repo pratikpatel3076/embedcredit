@@ -1,0 +1,55 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: vantage-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build: ./server
+    container_name: vantage-server
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/vantage_credit
+      JWT_SECRET: ${JWT_SECRET:-change_this_in_production}
+      PORT: 5000
+      CLIENT_URL: http://localhost:3000
+      FLDG_CAP: ${FLDG_CAP:-0.05}
+      NODE_ENV: development
+      SEED_ADMIN_USERNAME: ${SEED_ADMIN_USERNAME:-admin}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin@123}
+      SEED_DLA_USERNAME: ${SEED_DLA_USERNAME:-dla1}
+      SEED_DLA_PASSWORD: ${SEED_DLA_PASSWORD:-Dla@123}
+      SEED_LENDER_USERNAME: ${SEED_LENDER_USERNAME:-lender1}
+      SEED_LENDER_PASSWORD: ${SEED_LENDER_PASSWORD:-Lender@123}
+      SEED_LENDER_LENDER_ID: ${SEED_LENDER_LENDER_ID:-L003}
+      SEED_ON_BOOT: "true"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  client:
+    build: ./client
+    container_name: vantage-client
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_PROXY_TARGET: http://server:5000
+    depends_on:
+      - server
+
+volumes:
+  mongo-data:

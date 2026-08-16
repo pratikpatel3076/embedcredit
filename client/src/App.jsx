@@ -1,26 +1,35 @@
 import { useState, useEffect, useCallback } from "react";
 
-// ─── DESIGN TOKENS ───────────────────────────────────────────────
-const T = {
-  bg: "#0B0F1A",
-  surface: "#111827",
-  surfaceHigh: "#1C2535",
-  border: "#1E2D45",
-  accent: "#2563EB",
-  accentGlow: "#3B82F6",
-  accentSoft: "#1E3A5F",
-  green: "#10B981",
-  greenSoft: "#064E3B",
-  amber: "#F59E0B",
-  amberSoft: "#451A03",
-  red: "#EF4444",
-  redSoft: "#450A0A",
-  textPrimary: "#F1F5F9",
-  textSecondary: "#94A3B8",
-  textMuted: "#475569",
-  fontDisplay: "'Inter', sans-serif",
-  fontMono: "'JetBrains Mono', 'Fira Code', monospace",
-};
+// ─── THEME HOOK & PERSISTENCE ─────────────────────────────────────
+function useTheme() {
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem("vantage_theme");
+    if (saved === "dark" || saved === "light") return saved;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("vantage_theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = (e) => {
+      if (!localStorage.getItem("vantage_theme")) {
+        setTheme(e.matches ? "dark" : "light");
+      }
+    };
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  };
+
+  return [theme, toggleTheme];
+}
 
 // ─── API LAYER ───────────────────────────────────────────────────
 let authToken = null;
@@ -39,235 +48,419 @@ async function api(path, options = {}) {
   return data;
 }
 
-// ─── STYLES ──────────────────────────────────────────────────────
+// ─── STYLES & DESIGN SYSTEM TOKENS ────────────────────────────────
 const styles = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root, [data-theme="dark"] {
+    --bg-main: #0B0F17;
+    --bg-sidebar: #0F172A;
+    --bg-surface: #111827;
+    --bg-surface-elevated: #1F2937;
+    --bg-surface-hover: #1E293B;
+    --bg-input: #1F2937;
+    --border-color: #1F2D42;
+    --border-subtle: #192334;
+    --border-focus: #3B82F6;
+    
+    --primary: #2563EB;
+    --primary-hover: #1D4ED8;
+    --primary-glow: rgba(59, 130, 246, 0.35);
+    --primary-soft: rgba(37, 99, 235, 0.15);
+    --primary-text: #60A5FA;
+
+    --text-primary: #F8FAFC;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --text-inverse: #0F172A;
+
+    --green: #10B981;
+    --green-soft: rgba(16, 185, 129, 0.15);
+    --green-border: rgba(16, 185, 129, 0.3);
+
+    --amber: #F59E0B;
+    --amber-soft: rgba(245, 158, 11, 0.15);
+    --amber-border: rgba(245, 158, 11, 0.3);
+
+    --red: #EF4444;
+    --red-soft: rgba(239, 68, 68, 0.15);
+    --red-border: rgba(239, 68, 68, 0.3);
+
+    --blue: #3B82F6;
+    --blue-soft: rgba(59, 130, 246, 0.15);
+    --blue-border: rgba(59, 130, 246, 0.3);
+
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-full: 9999px;
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  [data-theme="light"] {
+    --bg-main: #F8FAFC;
+    --bg-sidebar: #FFFFFF;
+    --bg-surface: #FFFFFF;
+    --bg-surface-elevated: #F1F5F9;
+    --bg-surface-hover: #F8FAFC;
+    --bg-input: #FFFFFF;
+    --border-color: #E2E8F0;
+    --border-subtle: #F1F5F9;
+    --border-focus: #2563EB;
+
+    --primary: #2563EB;
+    --primary-hover: #1D4ED8;
+    --primary-glow: rgba(37, 99, 235, 0.2);
+    --primary-soft: rgba(37, 99, 235, 0.08);
+    --primary-text: #2563EB;
+
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #64748B;
+    --text-inverse: #FFFFFF;
+
+    --green: #059669;
+    --green-soft: #ECFDF5;
+    --green-border: #A7F3D0;
+
+    --amber: #D97706;
+    --amber-soft: #FFFBEB;
+    --amber-border: #FDE68A;
+
+    --red: #DC2626;
+    --red-soft: #FEF2F2;
+    --red-border: #FECACA;
+
+    --blue: #2563EB;
+    --blue-soft: #EFF6FF;
+    --blue-border: #BFDBFE;
+
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    background: ${T.bg};
-    color: ${T.textPrimary};
-    font-family: ${T.fontDisplay};
+    background: var(--bg-main);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
     font-size: 14px;
     line-height: 1.5;
     min-height: 100vh;
+    transition: background-color 0.25s ease, color 0.25s ease;
+    -webkit-font-smoothing: antialiased;
   }
 
-  .app { display: flex; min-height: 100vh; }
+  .app { display: flex; min-height: 100vh; position: relative; }
 
-  /* Sidebar */
+  /* ─── THEME TOGGLE BUTTON ─── */
+  .theme-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    background: var(--bg-surface-elevated);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+  }
+  .theme-toggle-btn:hover {
+    background: var(--bg-surface-hover);
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+  }
+  .theme-toggle-btn:focus-visible {
+    box-shadow: 0 0 0 2px var(--border-focus);
+  }
+  .theme-toggle-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .theme-toggle-btn:hover .theme-toggle-icon {
+    transform: rotate(18deg) scale(1.1);
+  }
+
+  /* ─── SIDEBAR ─── */
   .sidebar {
-    width: 230px;
-    background: ${T.surface};
-    border-right: 1px solid ${T.border};
+    width: 240px;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
     position: fixed;
     top: 0; left: 0; bottom: 0;
     z-index: 100;
+    transition: transform 0.25s ease-in-out, background-color 0.25s ease, border-color 0.25s ease;
   }
   .sidebar-logo {
-    padding: 20px 16px 16px;
-    border-bottom: 1px solid ${T.border};
+    padding: 20px 18px 16px;
+    border-bottom: 1px solid var(--border-color);
   }
-  .logo-mark { display: flex; align-items: center; gap: 10px; }
+  .logo-mark { display: flex; align-items: center; gap: 12px; }
   .logo-icon {
-    width: 32px; height: 32px;
-    background: linear-gradient(135deg, ${T.accent}, ${T.accentGlow});
-    border-radius: 8px;
+    width: 34px; height: 34px;
+    background: linear-gradient(135deg, var(--primary), #3B82F6);
+    border-radius: 9px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 16px; font-weight: 700; color: white;
-    box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+    font-size: 17px; font-weight: 800; color: white;
+    box-shadow: 0 0 14px var(--primary-glow);
   }
-  .logo-text { font-size: 15px; font-weight: 700; color: ${T.textPrimary}; letter-spacing: -0.3px; }
-  .logo-sub { font-size: 10px; color: ${T.textMuted}; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 1px; }
+  .logo-text { font-size: 16px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.3px; }
+  .logo-sub { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-top: 1px; font-weight: 600; }
 
-  .sidebar-nav { padding: 12px 8px; flex: 1; overflow-y: auto; }
+  .sidebar-nav { padding: 16px 10px; flex: 1; overflow-y: auto; }
   .nav-section-label {
     font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
-    color: ${T.textMuted}; padding: 10px 8px 4px; font-weight: 600;
+    color: var(--text-muted); padding: 8px 10px 6px; font-weight: 700;
   }
   .nav-item {
     display: flex; align-items: center; gap: 10px;
-    padding: 9px 10px; border-radius: 6px; cursor: pointer;
-    color: ${T.textSecondary}; font-size: 13px; font-weight: 500;
-    transition: all 0.15s; border: none; background: none; width: 100%; text-align: left;
-    margin-bottom: 2px;
+    padding: 9px 12px; border-radius: var(--radius-sm); cursor: pointer;
+    color: var(--text-secondary); font-size: 13px; font-weight: 500;
+    transition: all 0.15s ease; border: none; background: none; width: 100%; text-align: left;
+    margin-bottom: 3px; position: relative; outline: none;
   }
-  .nav-item:hover { background: ${T.surfaceHigh}; color: ${T.textPrimary}; }
-  .nav-item.active { background: ${T.accentSoft}; color: ${T.accentGlow}; font-weight: 600; }
-  .nav-item .nav-icon { font-size: 15px; width: 20px; text-align: center; }
+  .nav-item:hover { background: var(--bg-surface-elevated); color: var(--text-primary); }
+  .nav-item:focus-visible { box-shadow: 0 0 0 2px var(--border-focus); }
+  .nav-item.active {
+    background: var(--primary-soft);
+    color: var(--primary-text);
+    font-weight: 600;
+  }
+  .nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 6px; bottom: 6px; width: 3px;
+    background: var(--primary);
+    border-radius: 0 3px 3px 0;
+  }
+  .nav-item .nav-icon { font-size: 15px; width: 20px; text-align: center; display: inline-flex; align-items: center; justify-content: center; }
 
   .sidebar-footer {
-    padding: 12px 16px;
-    border-top: 1px solid ${T.border};
-    font-size: 11px; color: ${T.textMuted};
+    padding: 14px 18px;
+    border-top: 1px solid var(--border-color);
+    font-size: 11px; color: var(--text-muted);
   }
   .rbi-badge {
-    display: inline-flex; align-items: center; gap: 4px;
-    background: ${T.greenSoft}; color: ${T.green};
-    padding: 3px 8px; border-radius: 20px; font-size: 10px; font-weight: 600;
-    margin-bottom: 4px;
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--green-soft); color: var(--green);
+    border: 1px solid var(--green-border);
+    padding: 3px 10px; border-radius: var(--radius-full); font-size: 10px; font-weight: 700;
+    margin-bottom: 6px;
   }
 
-  /* Main */
-  .main { margin-left: 230px; flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  /* ─── MAIN CONTENT ─── */
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
   .topbar {
     padding: 16px 28px;
-    border-bottom: 1px solid ${T.border};
-    background: ${T.surface};
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-surface);
     display: flex; align-items: center; justify-content: space-between;
     position: sticky; top: 0; z-index: 50;
+    backdrop-filter: blur(8px);
+    transition: background-color 0.25s ease, border-color 0.25s ease;
   }
-  .page-title { font-size: 16px; font-weight: 600; color: ${T.textPrimary}; }
-  .page-subtitle { font-size: 12px; color: ${T.textMuted}; margin-top: 1px; }
-  .topbar-actions { display: flex; gap: 8px; align-items: center; }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+  .mobile-nav-toggle {
+    display: none;
+    background: var(--bg-surface-elevated);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 6px; border-radius: var(--radius-sm);
+    cursor: pointer; align-items: center; justify-content: center;
+  }
+  .page-title { font-size: 17px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.2px; }
+  .page-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  .topbar-actions { display: flex; gap: 10px; align-items: center; }
 
-  .content { padding: 24px 28px; flex: 1; }
+  .content { padding: 28px; flex: 1; }
 
-  /* Cards */
+  /* Mobile overlay */
+  .mobile-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(3px);
+    z-index: 90;
+  }
+
+  /* ─── CARDS ─── */
   .card {
-    background: ${T.surface};
-    border: 1px solid ${T.border};
-    border-radius: 10px;
-    padding: 20px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 22px;
+    box-shadow: var(--shadow-sm);
+    transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
   }
-  .card-sm { padding: 14px 16px; }
-  .card-title { font-size: 14px; font-weight: 600; color: ${T.textPrimary}; margin-bottom: 4px; }
-  .card-sub { font-size: 11px; color: ${T.textMuted}; }
+  .card-sm { padding: 14px 18px; }
+  .card-title { font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; letter-spacing: -0.2px; }
+  .card-sub { font-size: 12px; color: var(--text-muted); }
 
-  /* Stats Grid */
-  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 24px; }
-  .stat-card { background: ${T.surface}; border: 1px solid ${T.border}; border-radius: 10px; padding: 16px 20px; }
-  .stat-label { font-size: 11px; color: ${T.textMuted}; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; margin-bottom: 8px; }
-  .stat-value { font-size: 24px; font-weight: 700; color: ${T.textPrimary}; letter-spacing: -0.5px; }
-  .stat-delta { font-size: 11px; color: ${T.green}; margin-top: 4px; }
+  /* ─── STATS GRID ─── */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 18px 20px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--primary-glow); }
+  .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; margin-bottom: 8px; }
+  .stat-value { font-size: 26px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.6px; line-height: 1.1; }
+  .stat-delta { font-size: 11px; color: var(--green); margin-top: 6px; font-weight: 500; display: flex; align-items: center; gap: 4px; }
 
   /* Grid layouts */
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 
-  /* Table */
-  .table-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; }
+  /* ─── TABLE ─── */
+  .table-wrap { overflow-x: auto; border-radius: var(--radius-md); }
+  table { width: 100%; border-collapse: collapse; text-align: left; }
   th {
-    text-align: left; padding: 10px 12px;
-    font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
-    color: ${T.textMuted}; font-weight: 600;
-    border-bottom: 1px solid ${T.border};
+    padding: 12px 14px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--text-muted); font-weight: 700;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-surface-elevated);
   }
-  td { padding: 12px 12px; font-size: 13px; color: ${T.textSecondary}; border-bottom: 1px solid ${T.border}; }
+  td { padding: 13px 14px; font-size: 13px; color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); vertical-align: middle; }
   tr:last-child td { border-bottom: none; }
-  tr:hover td { background: ${T.surfaceHigh}; }
-  .td-primary { color: ${T.textPrimary}; font-weight: 500; }
-  .td-mono { font-family: ${T.fontMono}; font-size: 12px; }
+  tr:hover td { background: var(--bg-surface-hover); }
+  .td-primary { color: var(--text-primary); font-weight: 600; }
+  .td-mono { font-family: var(--font-mono); font-size: 12px; }
 
-  /* Badges */
+  /* ─── BADGES ─── */
   .badge {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 3px 8px; border-radius: 20px;
-    font-size: 11px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: var(--radius-full);
+    font-size: 11px; font-weight: 600; line-height: 1;
+    white-space: nowrap;
   }
-  .badge-green { background: ${T.greenSoft}; color: ${T.green}; }
-  .badge-amber { background: ${T.amberSoft}; color: ${T.amber}; }
-  .badge-red { background: ${T.redSoft}; color: ${T.red}; }
-  .badge-blue { background: ${T.accentSoft}; color: ${T.accentGlow}; }
-  .badge-muted { background: ${T.surfaceHigh}; color: ${T.textMuted}; }
+  .badge-green { background: var(--green-soft); color: var(--green); border: 1px solid var(--green-border); }
+  .badge-amber { background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber-border); }
+  .badge-red { background: var(--red-soft); color: var(--red); border: 1px solid var(--red-border); }
+  .badge-blue { background: var(--blue-soft); color: var(--blue); border: 1px solid var(--blue-border); }
+  .badge-muted { background: var(--bg-surface-elevated); color: var(--text-muted); border: 1px solid var(--border-color); }
 
-  /* Buttons */
+  /* ─── BUTTONS ─── */
   .btn {
-    padding: 8px 16px; border-radius: 7px; border: none;
+    padding: 9px 18px; border-radius: var(--radius-sm); border: 1px solid transparent;
     font-size: 13px; font-weight: 600; cursor: pointer;
-    transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; justify-content: center;
+    transition: all 0.15s ease; display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+    outline: none; text-decoration: none; font-family: inherit;
   }
-  .btn-primary { background: ${T.accent}; color: white; }
-  .btn-primary:hover { background: ${T.accentGlow}; }
-  .btn-primary:disabled { background: ${T.border}; cursor: not-allowed; }
-  .btn-success { background: ${T.green}; color: white; }
-  .btn-success:hover { background: #059669; }
-  .btn-secondary { background: ${T.surfaceHigh}; color: ${T.textPrimary}; border: 1px solid ${T.border}; }
-  .btn-secondary:hover { background: ${T.border}; }
-  .btn-ghost { background: none; color: ${T.textSecondary}; border: 1px solid ${T.border}; }
-  .btn-ghost:hover { color: ${T.textPrimary}; border-color: ${T.textSecondary}; }
-  .btn-sm { padding: 5px 10px; font-size: 12px; }
-  .btn-danger { background: ${T.redSoft}; color: ${T.red}; border: 1px solid ${T.redSoft}; }
+  .btn:focus-visible { box-shadow: 0 0 0 2px var(--border-focus); }
+  .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+  .btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+  .btn-success { background: var(--green); color: white; border-color: var(--green); }
+  .btn-success:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+  .btn-secondary { background: var(--bg-surface-elevated); color: var(--text-primary); border: 1px solid var(--border-color); }
+  .btn-secondary:hover { background: var(--bg-surface-hover); border-color: var(--text-muted); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); }
+  .btn-ghost:hover { color: var(--text-primary); border-color: var(--text-muted); background: var(--bg-surface-elevated); }
+  .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: var(--radius-sm); }
+  .btn-danger { background: var(--red-soft); color: var(--red); border: 1px solid var(--red-border); }
+  .btn-danger:hover { background: var(--red); color: white; }
 
-  /* Form */
-  .form-group { margin-bottom: 16px; }
-  .form-label { display: block; font-size: 11px; font-weight: 600; color: ${T.textSecondary}; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  /* ─── FORMS ─── */
+  .form-group { margin-bottom: 18px; }
+  .form-label { display: block; font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.6px; }
   .form-input, .form-select {
-    width: 100%; padding: 9px 12px; background: ${T.surfaceHigh};
-    border: 1px solid ${T.border}; border-radius: 6px;
-    color: ${T.textPrimary}; font-size: 13px; font-family: inherit;
-    outline: none; transition: border-color 0.15s;
+    width: 100%; padding: 10px 14px; background: var(--bg-input);
+    border: 1px solid var(--border-color); border-radius: var(--radius-sm);
+    color: var(--text-primary); font-size: 13px; font-family: inherit;
+    outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
-  .form-input:focus, .form-select:focus { border-color: ${T.accent}; }
-  .form-hint { font-size: 11px; color: ${T.textMuted}; margin-top: 4px; }
-  .form-error { font-size: 11px; color: ${T.red}; margin-top: 4px; }
-  .form-inline { display: flex; gap: 8px; align-items: flex-start; }
+  .form-input:focus, .form-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+  .form-hint { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
+  .form-error { font-size: 11px; color: var(--red); margin-top: 5px; font-weight: 500; }
+  .form-inline { display: flex; gap: 10px; align-items: flex-start; }
   .form-inline .form-group { flex: 1; margin-bottom: 0; }
 
   /* Flow chart */
-  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-  .section-title { font-size: 15px; font-weight: 600; color: ${T.textPrimary}; }
-  .flow { display: flex; align-items: center; justify-content: space-between; overflow-x: auto; padding: 12px 0; margin-bottom: 14px; }
+  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+  .section-title { font-size: 16px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.2px; }
+  .flow { display: flex; align-items: center; justify-content: space-between; overflow-x: auto; padding: 14px 0; margin-bottom: 16px; gap: 6px; }
   .flow-node {
-    background: ${T.surfaceHigh}; border: 1px solid ${T.border};
-    border-radius: 8px; padding: 10px 14px; font-size: 12px; font-weight: 600; color: ${T.textPrimary};
-    text-align: center; min-width: 90px;
+    background: var(--bg-surface-elevated); border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; font-weight: 600; color: var(--text-primary);
+    text-align: center; min-width: 100px; transition: all 0.2s ease;
   }
-  .flow-node-active { border-color: ${T.accent}; color: ${T.accentGlow}; background: ${T.accentSoft}; }
-  .flow-arrow { color: ${T.textMuted}; font-size: 16px; margin: 0 4px; }
-  .flow-sub { font-size: 10px; color: ${T.textMuted}; font-weight: 400; margin-top: 2px; }
+  .flow-node-active { border-color: var(--primary); color: var(--primary-text); background: var(--primary-soft); box-shadow: var(--shadow-sm); }
+  .flow-arrow { color: var(--text-muted); font-size: 16px; margin: 0 2px; }
+  .flow-sub { font-size: 10px; color: var(--text-muted); font-weight: 400; margin-top: 2px; }
 
   /* Compliance strip */
   .compliance-strip {
-    background: ${T.amberSoft}; border: 1px solid ${T.amber};
-    border-radius: 7px; padding: 10px 14px; margin-bottom: 16px;
-    font-size: 12px; color: ${T.amber}; display: flex; gap: 8px; align-items: flex-start;
+    background: var(--amber-soft); border: 1px solid var(--amber-border);
+    border-radius: var(--radius-sm); padding: 12px 16px; margin-bottom: 18px;
+    font-size: 12px; color: var(--amber); display: flex; gap: 10px; align-items: flex-start;
+    line-height: 1.45;
   }
 
   /* Progress Gauge */
-  .gauge-container { background: ${T.surfaceHigh}; border-radius: 10px; height: 10px; overflow: hidden; margin: 8px 0; width: 100%; }
-  .gauge-fill { height: 100%; border-radius: 10px; transition: width 0.3s ease; }
+  .gauge-container { background: var(--bg-surface-elevated); border-radius: var(--radius-full); height: 10px; overflow: hidden; margin: 8px 0; width: 100%; border: 1px solid var(--border-color); }
+  .gauge-fill { height: 100%; border-radius: var(--radius-full); transition: width 0.4s ease-out; }
 
   /* KFS Document Panel */
   .kfs-panel {
-    background: ${T.surfaceHigh}; border: 1px solid ${T.border};
-    border-radius: 8px; padding: 16px; margin-top: 12px;
+    background: var(--bg-surface-elevated); border: 1px solid var(--border-color);
+    border-radius: var(--radius-md); padding: 18px; margin-top: 14px;
+    box-shadow: var(--shadow-sm);
   }
-  .kfs-title { font-size: 13px; font-weight: 700; color: ${T.accentGlow}; margin-bottom: 10px; display: flex; justify-content: space-between; }
-  .kfs-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed ${T.border}; font-size: 12px; }
+  .kfs-title { font-size: 14px; font-weight: 700; color: var(--primary-text); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .kfs-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--border-color); font-size: 12px; }
   .kfs-row:last-child { border-bottom: none; }
-  .kfs-key { color: ${T.textMuted}; }
-  .kfs-val { color: ${T.textPrimary}; font-family: ${T.fontMono}; font-weight: 500; }
-  .kfs-disclaimer { font-size: 10px; color: ${T.textMuted}; font-style: italic; margin-top: 10px; padding-top: 8px; border-top: 1px solid ${T.border}; }
+  .kfs-key { color: var(--text-muted); }
+  .kfs-val { color: var(--text-primary); font-family: var(--font-mono); font-weight: 600; }
+  .kfs-disclaimer { font-size: 11px; color: var(--text-muted); font-style: italic; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-color); }
 
   /* Engine Metrics */
-  .engine-metric { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid ${T.border}; font-size: 12px; }
+  .engine-metric { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border-subtle); font-size: 12px; }
   .engine-metric:last-child { border-bottom: none; }
-  .engine-metric-label { color: ${T.textMuted}; }
-  .engine-metric-value { font-family: ${T.fontMono}; font-weight: 600; color: ${T.textPrimary}; }
+  .engine-metric-label { color: var(--text-muted); }
+  .engine-metric-value { font-family: var(--font-mono); font-weight: 600; color: var(--text-primary); }
 
-  .engine-result { border-radius: 8px; overflow: hidden; border: 1px solid ${T.border}; }
-  .engine-result-header { padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; }
-  .engine-result-pass { background: ${T.surfaceHigh}; border-left: 4px solid ${T.green}; }
-  .engine-result-fail { background: ${T.surfaceHigh}; border-left: 4px solid ${T.red}; }
-  .engine-result-body { padding: 12px 14px; background: ${T.surface}; }
+  .engine-result { border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border-color); margin-bottom: 10px; }
+  .engine-result-header { padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
+  .engine-result-pass { background: var(--bg-surface-elevated); border-left: 4px solid var(--green); }
+  .engine-result-fail { background: var(--bg-surface-elevated); border-left: 4px solid var(--red); }
+  .engine-result-body { padding: 12px 16px; background: var(--bg-surface); }
 
   /* Layout helpers */
-  .divider { border: 0; border-top: 1px solid ${T.border}; margin: 16px 0; }
-  .empty { text-align: center; padding: 48px 20px; color: ${T.textMuted}; }
-  .empty-icon { font-size: 32px; margin-bottom: 12px; }
-  .empty-text { font-size: 14px; margin-bottom: 4px; color: ${T.textSecondary}; }
-  .empty-sub { font-size: 12px; }
+  .divider { border: 0; border-top: 1px solid var(--border-color); margin: 18px 0; }
+  .empty { text-align: center; padding: 48px 20px; color: var(--text-muted); }
+  .empty-icon { font-size: 36px; margin-bottom: 12px; }
+  .empty-text { font-size: 15px; margin-bottom: 4px; color: var(--text-primary); font-weight: 600; }
+  .empty-sub { font-size: 12px; color: var(--text-secondary); }
 
   /* Scrollbar */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: ${T.bg}; }
-  ::-webkit-scrollbar-thumb { background: ${T.border}; border-radius: 3px; }
+  ::-webkit-scrollbar-track { background: var(--bg-main); }
+  ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
   .mt-4 { margin-top: 16px; }
   .mb-4 { margin-bottom: 16px; }
@@ -277,50 +470,73 @@ const styles = `
   .gap-2 { gap: 8px; }
   .gap-3 { gap: 12px; }
   .text-sm { font-size: 12px; }
-  .text-muted { color: ${T.textMuted}; }
-  .text-green { color: ${T.green}; }
-  .text-red { color: ${T.red}; }
-  .text-amber { color: ${T.amber}; }
-  .font-mono { font-family: ${T.fontMono}; }
+  .text-muted { color: var(--text-muted); }
+  .text-green { color: var(--green); }
+  .text-red { color: var(--red); }
+  .text-amber { color: var(--amber); }
+  .font-mono { font-family: var(--font-mono); }
   .w-full { width: 100%; }
 
   /* Login */
-  .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
-  .login-card { width: 100%; max-width: 420px; }
-  .login-hero { text-align: center; margin-bottom: 20px; }
+  .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--bg-main); }
+  .login-card { width: 100%; max-width: 440px; box-shadow: var(--shadow-lg); }
+  .login-hero { text-align: center; margin-bottom: 24px; }
   .login-logo {
-    width: 48px; height: 48px; margin: 0 auto 12px;
-    background: linear-gradient(135deg, ${T.accent}, ${T.accentGlow});
-    border-radius: 12px;
+    width: 52px; height: 52px; margin: 0 auto 14px;
+    background: linear-gradient(135deg, var(--primary), #3B82F6);
+    border-radius: 14px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 24px; font-weight: 700; color: white;
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+    font-size: 26px; font-weight: 800; color: white;
+    box-shadow: 0 0 24px var(--primary-glow);
   }
-  .login-sub { font-size: 12px; color: ${T.textMuted}; margin-top: 2px; }
-  .quick-account { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .login-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; font-weight: 500; }
+  .quick-account { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
   .quick-account button {
-    padding: 6px 12px; font-size: 11px; border-radius: 20px; border: 1px solid ${T.border};
-    background: ${T.surfaceHigh}; color: ${T.textSecondary}; cursor: pointer; transition: all 0.15s;
+    padding: 7px 14px; font-size: 11px; border-radius: var(--radius-full); border: 1px solid var(--border-color);
+    background: var(--bg-surface-elevated); color: var(--text-secondary); cursor: pointer; transition: all 0.15s ease;
   }
-  .quick-account button:hover { color: ${T.textPrimary}; border-color: ${T.accent}; background: ${T.accentSoft}; }
+  .quick-account button:hover { color: var(--text-primary); border-color: var(--primary); background: var(--primary-soft); transform: translateY(-1px); }
 
   /* Loading & banners */
-  .loading-screen { min-height: 100vh; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; color: ${T.textSecondary}; }
+  .loading-screen { min-height: 100vh; display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center; color: var(--text-secondary); }
   .spinner {
     width: 28px; height: 28px; border-radius: 50%;
-    border: 3px solid ${T.border}; border-top-color: ${T.accent};
+    border: 3px solid var(--border-color); border-top-color: var(--primary);
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   .error-banner {
-    background: ${T.redSoft}; border: 1px solid ${T.red};
-    color: ${T.red}; border-radius: 7px; padding: 10px 14px; margin-bottom: 16px;
-    font-size: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    background: var(--red-soft); border: 1px solid var(--red-border);
+    color: var(--red); border-radius: var(--radius-sm); padding: 12px 16px; margin-bottom: 18px;
+    font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 12px;
   }
   .success-banner {
-    background: ${T.greenSoft}; border: 1px solid ${T.green};
-    color: ${T.green}; border-radius: 7px; padding: 10px 14px; margin-bottom: 16px;
-    font-size: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    background: var(--green-soft); border: 1px solid var(--green-border);
+    color: var(--green); border-radius: var(--radius-sm); padding: 12px 16px; margin-bottom: 18px;
+    font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  }
+  .close-btn { background: none; border: none; color: inherit; cursor: pointer; font-size: 14px; opacity: 0.7; }
+  .close-btn:hover { opacity: 1; }
+
+  /* Responsive Media Queries */
+  @media (max-width: 768px) {
+    .sidebar {
+      transform: translateX(-100%);
+      box-shadow: var(--shadow-lg);
+    }
+    .sidebar.mobile-open {
+      transform: translateX(0);
+    }
+    .mobile-overlay.mobile-open {
+      display: block;
+    }
+    .main { margin-left: 0; }
+    .topbar { padding: 14px 18px; }
+    .mobile-nav-toggle { display: inline-flex; }
+    .content { padding: 18px; }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    .flow { overflow-x: auto; justify-content: flex-start; }
+    .flow-node { min-width: 90px; }
   }
 `;
 
@@ -342,8 +558,44 @@ function formatINR(n) {
   return "₹" + Number(n).toLocaleString("en-IN");
 }
 
+// ─── THEME TOGGLE COMPONENT ───────────────────────────────────────
+function ThemeToggle({ theme, onToggle }) {
+  const isDark = theme === "dark";
+  const tooltipText = isDark ? "Switch to Light Mode" : "Switch to Dark Mode";
+
+  return (
+    <button
+      type="button"
+      className="theme-toggle-btn"
+      onClick={onToggle}
+      aria-label={tooltipText}
+      title={tooltipText}
+    >
+      <div className="theme-toggle-icon">
+        {isDark ? (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        ) : (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" />
+            <line x1="12" y1="21" x2="12" y2="23" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+            <line x1="1" y1="12" x2="3" y2="12" />
+            <line x1="21" y1="12" x2="23" y2="12" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+          </svg>
+        )}
+      </div>
+    </button>
+  );
+}
+
 // ─── LOGIN PAGE ──────────────────────────────────────────────────
-function LoginPage({ onLogin }) {
+function LoginPage({ onLogin, theme, onToggleTheme }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -371,26 +623,30 @@ function LoginPage({ onLogin }) {
   return (
     <div className="login-wrap">
       <div className="card login-card">
+        <div className="flex justify-between items-center mb-4">
+          <div className="rbi-badge">✓ RBI DL 2022</div>
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+        </div>
         <div className="login-hero">
           <div className="login-logo">V</div>
-          <div className="logo-text" style={{ fontSize: 20 }}>Vantage Credit</div>
+          <div className="logo-text" style={{ fontSize: 22 }}>Vantage Credit</div>
           <div className="login-sub">Embedded Credit Marketplace · RBI DL 2022 Compliant</div>
         </div>
         <form onSubmit={submit}>
           <div className="form-group">
             <label className="form-label">Username</label>
-            <input className="form-input" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="dla1 / lender1 / admin" autoComplete="username" />
+            <input className="form-input" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="dla1 / lender1 / admin" autoComplete="username" required />
           </div>
           <div className="form-group">
             <label className="form-label">Password</label>
-            <input className="form-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+            <input className="form-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password" required />
           </div>
-          {err && <div className="form-error" style={{ marginBottom: 12 }}>{err}</div>}
+          {err && <div className="form-error" style={{ marginBottom: 14 }}>{err}</div>}
           <button className="btn btn-primary w-full" disabled={busy} type="submit">
             {busy ? "Signing in…" : "Sign in to Platform"}
           </button>
         </form>
-        <div style={{ fontSize: 11, color: T.textMuted, marginTop: 16, marginBottom: 4, fontWeight: 600, textTransform: "uppercase" }}>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 20, marginBottom: 6, fontWeight: 700, textTransform: "uppercase" }}>
           Demo Role Logins:
         </div>
         <div className="quick-account">
@@ -400,8 +656,8 @@ function LoginPage({ onLogin }) {
             </button>
           ))}
         </div>
-        <div className="form-hint" style={{ marginTop: 14, textAlign: "center" }}>
-          JWT authentication · In-memory state · No direct money handling
+        <div className="form-hint" style={{ marginTop: 16, textAlign: "center" }}>
+          JWT authentication · In-memory state · Direct Funds Flow
         </div>
       </div>
     </div>
@@ -429,7 +685,7 @@ function DashboardPage({ applications, user }) {
           <div key={s.label} className="stat-card">
             <div className="stat-label">{s.label}</div>
             <div className="stat-value">{s.value}</div>
-            <div className="stat-delta">{s.delta}</div>
+            <div className="stat-delta">● {s.delta}</div>
           </div>
         ))}
       </div>
@@ -502,7 +758,7 @@ function DashboardPage({ applications, user }) {
                     <td className="td-primary">{app.borrowerName}</td>
                     <td className="td-mono">{formatINR(app.amount)}</td>
                     <td><span className="badge badge-muted">{app.purpose}</span></td>
-                    <td className="td-mono" style={{ color: app.cibilScore >= 700 ? T.green : app.cibilScore >= 650 ? T.amber : T.red }}>
+                    <td className="td-mono" style={{ color: app.cibilScore >= 700 ? "var(--green)" : app.cibilScore >= 650 ? "var(--amber)" : "var(--red)", fontWeight: 600 }}>
                       {app.cibilScore}
                     </td>
                     <td><StatusBadge status={app.status} /></td>
@@ -626,19 +882,20 @@ function NewApplicationPage({ onSubmit }) {
   }
 
   return (
-    <div style={{ maxWidth: 580 }}>
+    <div style={{ maxWidth: 620, margin: "0 auto" }}>
       {submitError && <div className="error-banner"><span>{submitError}</span><button className="close-btn" onClick={() => setSubmitError(null)}>✕</button></div>}
 
-      <div className="flex gap-2 mb-4" style={{ marginBottom: 20 }}>
+      <div className="flex gap-2 mb-4" style={{ marginBottom: 22, flexWrap: "wrap" }}>
         {["1. Borrower Identity", "2. Loan Requirements", "3. Review & Submit"].map((label, i) => (
           <div key={i} className="flex items-center gap-2">
             <div style={{
-              width: 24, height: 24, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+              width: 26, height: 26, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 11, fontWeight: 700,
-              background: step > i + 1 ? T.green : step === i + 1 ? T.accent : T.surfaceHigh,
-              color: step >= i + 1 ? "white" : T.textMuted,
+              background: step > i + 1 ? "var(--green)" : step === i + 1 ? "var(--primary)" : "var(--bg-surface-elevated)",
+              color: step >= i + 1 ? "white" : "var(--text-muted)",
+              border: `1px solid ${step >= i + 1 ? "transparent" : "var(--border-color)"}`
             }}>{step > i + 1 ? "✓" : i + 1}</div>
-            <span style={{ fontSize: 12, color: step === i + 1 ? T.textPrimary : T.textMuted, fontWeight: step === i + 1 ? 600 : 400 }}>{label}</span>
+            <span style={{ fontSize: 13, color: step === i + 1 ? "var(--text-primary)" : "var(--text-muted)", fontWeight: step === i + 1 ? 600 : 400 }}>{label}</span>
             {i < 2 && <span className="text-muted" style={{ fontSize: 14 }}>›</span>}
           </div>
         ))}
@@ -678,7 +935,7 @@ function NewApplicationPage({ onSubmit }) {
             <div className="form-group">
               <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
                 <input type="checkbox" checked={form.aaConsent} onChange={e => update("aaConsent", e.target.checked)} style={{ marginTop: 3 }} />
-                <span style={{ fontSize: 12, color: T.textSecondary }}>
+                <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
                   <strong>Grant Account Aggregator Consent:</strong> Borrower explicitly authorizes retrieval of financial statements via RBI-regulated Account Aggregator network. Logged with timestamp.
                 </span>
               </label>
@@ -849,7 +1106,7 @@ function CreditEnginePage({ applications, lenders, onRoute }) {
           </div>
         )}
         {pending.map(app => (
-          <div key={app.id} className="card card-sm mb-4" style={{ marginBottom: 10, cursor: "pointer", border: selected?.id === app.id ? `1px solid ${T.accent}` : undefined }} onClick={() => runEngine(app)}>
+          <div key={app.id} className="card card-sm mb-4" style={{ marginBottom: 10, cursor: "pointer", border: selected?.id === app.id ? `1px solid var(--primary)` : undefined }} onClick={() => runEngine(app)}>
             <div className="flex justify-between items-center">
               <div>
                 <div className="td-primary" style={{ fontWeight: 600, marginBottom: 4 }}>{app.borrowerName}</div>
@@ -866,7 +1123,7 @@ function CreditEnginePage({ applications, lenders, onRoute }) {
           <>
             <div className="section-title" style={{ marginTop: 24, marginBottom: 10 }}>Already Processed</div>
             {applications.filter(a => a.status !== "pending_review").map(app => (
-              <div key={app.id} className="card card-sm" style={{ marginBottom: 8, opacity: 0.75 }}>
+              <div key={app.id} className="card card-sm" style={{ marginBottom: 8, opacity: 0.8 }}>
                 <div className="flex justify-between items-center">
                   <div>
                     <div className="td-primary" style={{ fontWeight: 600, marginBottom: 2 }}>{app.borrowerName}</div>
@@ -909,18 +1166,18 @@ function CreditEnginePage({ applications, lenders, onRoute }) {
 
             {routeError && <div className="error-banner"><span>{routeError}</span><button className="close-btn" onClick={() => setRouteError(null)}>✕</button></div>}
 
-            <div className="card card-sm mb-4" style={{ marginBottom: 12 }}>
+            <div className="card card-sm mb-4" style={{ marginBottom: 14 }}>
               <div className="engine-metric">
                 <span className="engine-metric-label">Loan Amount</span>
                 <span className="engine-metric-value">{formatINR(selected.amount)}</span>
               </div>
               <div className="engine-metric">
                 <span className="engine-metric-label">CIBIL Score</span>
-                <span className="engine-metric-value" style={{ color: selected.cibilScore >= 700 ? T.green : T.amber }}>{selected.cibilScore}</span>
+                <span className="engine-metric-value" style={{ color: selected.cibilScore >= 700 ? "var(--green)" : "var(--amber)" }}>{selected.cibilScore}</span>
               </div>
               <div className="engine-metric">
                 <span className="engine-metric-label">DTI Ratio</span>
-                <span className="engine-metric-value" style={{ color: result.dti > 0.5 ? T.red : result.dti > 0.35 ? T.amber : T.green }}>
+                <span className="engine-metric-value" style={{ color: result.dti > 0.5 ? "var(--red)" : result.dti > 0.35 ? "var(--amber)" : "var(--green)" }}>
                   {(result.dti * 100).toFixed(1)}% {result.dti > 0.55 ? "⚠ High DTI" : ""}
                 </span>
               </div>
@@ -932,12 +1189,12 @@ function CreditEnginePage({ applications, lenders, onRoute }) {
 
             {result.eligible.length > 0 && (
               <>
-                <div className="card-title" style={{ marginBottom: 8, color: T.green }}>✓ Eligible Lenders — {result.eligible.length}</div>
+                <div className="card-title" style={{ marginBottom: 10, color: "var(--green)" }}>✓ Eligible Lenders — {result.eligible.length}</div>
                 {result.eligible.map(({ lender, emi, score }) => (
-                  <div key={lender.id} className="engine-result mb-4" style={{ marginBottom: 8 }}>
+                  <div key={lender.id} className="engine-result mb-4" style={{ marginBottom: 10 }}>
                     <div className="engine-result-header engine-result-pass">
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 13, color: T.textPrimary }}>{lender.lenderName}</div>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text-primary)" }}>{lender.lenderName}</div>
                         <div className="text-sm text-muted">{lender.type} · {lender.interestRate}% p.a. · EMI {formatINR(emi)}</div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -972,13 +1229,13 @@ function CreditEnginePage({ applications, lenders, onRoute }) {
 
             {result.rejected.length > 0 && (
               <>
-                <div className="card-title" style={{ marginBottom: 8, color: T.textMuted, marginTop: 14 }}>✗ Ineligible Lenders — {result.rejected.length}</div>
+                <div className="card-title" style={{ marginBottom: 10, color: "var(--text-muted)", marginTop: 16 }}>✗ Ineligible Lenders — {result.rejected.length}</div>
                 {result.rejected.map(({ lender, reasons }) => (
-                  <div key={lender.id} className="engine-result" style={{ marginBottom: 6 }}>
+                  <div key={lender.id} className="engine-result" style={{ marginBottom: 8 }}>
                     <div className="engine-result-header engine-result-fail">
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 13, color: T.textSecondary }}>{lender.lenderName} ({lender.type})</div>
-                        <div className="text-sm" style={{ color: T.red, marginTop: 2 }}>{reasons.join(" · ")}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: "var(--text-secondary)" }}>{lender.lenderName} ({lender.type})</div>
+                        <div className="text-sm" style={{ color: "var(--red)", marginTop: 2 }}>{reasons.join(" · ")}</div>
                       </div>
                     </div>
                   </div>
@@ -987,7 +1244,7 @@ function CreditEnginePage({ applications, lenders, onRoute }) {
             )}
 
             {kfs && (
-              <div style={{ marginTop: 16 }}>
+              <div style={{ marginTop: 18 }}>
                 <div className="kfs-panel">
                   <div className="kfs-title">
                     <span>⬡ Key Fact Statement (KFS) Generated</span>
@@ -1029,7 +1286,6 @@ function CreditEnginePage({ applications, lenders, onRoute }) {
 
 // ─── ROUTED LOANS & DISBURSAL PAGE (LENDER ROLE) ────────────────────
 function RoutedLoansPage({ applications, user, onRefresh }) {
-  // Scope apps to lender (backend also restricts GET /applications for LENDER)
   const routedApps = applications.filter((a) => a.status === "routed" || a.status === "disbursed");
   const [selectedApp, setSelectedApp] = useState(null);
   const [kfsData, setKfsData] = useState(null);
@@ -1104,7 +1360,7 @@ function RoutedLoansPage({ applications, user, onRefresh }) {
                 style={{
                   marginBottom: 10,
                   cursor: "pointer",
-                  border: selectedApp?.id === app.id ? `1px solid ${T.accent}` : undefined,
+                  border: selectedApp?.id === app.id ? `1px solid var(--primary)` : undefined,
                 }}
                 onClick={() => selectApp(app)}
               >
@@ -1129,7 +1385,7 @@ function RoutedLoansPage({ applications, user, onRefresh }) {
             </div>
           ) : (
             <div className="card">
-              <div className="flex justify-between items-center" style={{ marginBottom: 12 }}>
+              <div className="flex justify-between items-center" style={{ marginBottom: 14 }}>
                 <div>
                   <div className="card-title" style={{ fontSize: 16 }}>{selectedApp.borrowerName}</div>
                   <div className="text-sm text-muted">{selectedApp.id} · PAN: {selectedApp.pan}</div>
@@ -1138,18 +1394,18 @@ function RoutedLoansPage({ applications, user, onRefresh }) {
               </div>
 
               {selectedApp.status === "routed" && (
-                <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: 18 }}>
                   <button className="btn btn-success w-full" onClick={handleDisburse} disabled={disbursing}>
                     {disbursing ? "Executing Disbursal…" : "✓ Disburse Loan (Record State)"}
                   </button>
-                  <div className="form-hint" style={{ textAlign: "center", marginTop: 6 }}>
+                  <div className="form-hint" style={{ textAlign: "center", marginTop: 8 }}>
                     Direct transfer from {user.lenderId} bank account → Borrower account.
                   </div>
                 </div>
               )}
 
               {selectedApp.status === "disbursed" && (
-                <div className="success-banner" style={{ marginBottom: 16 }}>
+                <div className="success-banner" style={{ marginBottom: 18 }}>
                   <span>✓ Loan disbursed on platform. Funds transferred directly to borrower.</span>
                 </div>
               )}
@@ -1263,7 +1519,7 @@ function LenderPortfolioPage({ user }) {
 
       <div className="card mb-4">
         <div className="card-title">FLDG Guarantee Cap Utilization Gauge (RBI 5% Limit)</div>
-        <div className="flex justify-between text-sm mt-4 mb-4" style={{ marginTop: 12 }}>
+        <div className="flex justify-between text-sm mt-4 mb-4" style={{ marginTop: 14 }}>
           <span>Current Exposure: <strong>{formatINR(fldgExposure)}</strong></span>
           <span>Utilization: <strong>{utilizationPct}%</strong> of {formatINR(capLimit)} Cap</span>
         </div>
@@ -1272,17 +1528,17 @@ function LenderPortfolioPage({ user }) {
             className="gauge-fill"
             style={{
               width: `${Math.min(100, utilizationPct)}%`,
-              background: utilizationPct > 90 ? T.red : utilizationPct > 75 ? T.amber : T.green,
+              background: utilizationPct > 90 ? "var(--red)" : utilizationPct > 75 ? "var(--amber)" : "var(--green)",
             }}
           />
         </div>
-        <div className="form-hint" style={{ marginTop: 8 }}>
+        <div className="form-hint" style={{ marginTop: 10 }}>
           Under RBI Digital Lending Guidelines 2022, First Loss Default Guarantee (FLDG) provided by DLAs to lending partners cannot exceed 5% of the total loan portfolio value.
         </div>
       </div>
 
       <div className="card">
-        <div className="card-title" style={{ marginBottom: 12 }}>Product Parameters & Rule Engine Config</div>
+        <div className="card-title" style={{ marginBottom: 14 }}>Product Parameters & Rule Engine Config</div>
         {[
           ["Lender Entity ID", lender.id],
           ["Institution Type", lender.type],
@@ -1371,15 +1627,15 @@ function AdminStatsPage() {
       <div className="grid-2 mb-4">
         <div className="card">
           <div className="card-title">Portfolio Credit Quality</div>
-          <div className="flex justify-between items-center mt-4" style={{ marginTop: 14 }}>
+          <div className="flex justify-between items-center mt-4" style={{ marginTop: 16 }}>
             <span className="text-muted">Average Portfolio CIBIL Score</span>
-            <span className="stat-value" style={{ fontSize: 20, color: T.green }}>{stats.avgCibil}</span>
+            <span className="stat-value" style={{ fontSize: 22, color: "var(--green)" }}>{stats.avgCibil}</span>
           </div>
-          <div className="flex justify-between items-center mt-4" style={{ marginTop: 10 }}>
+          <div className="flex justify-between items-center mt-4" style={{ marginTop: 12 }}>
             <span className="text-muted">Pending Review Applications</span>
             <span className="badge badge-amber">{stats.pending}</span>
           </div>
-          <div className="flex justify-between items-center mt-4" style={{ marginTop: 10 }}>
+          <div className="flex justify-between items-center mt-4" style={{ marginTop: 12 }}>
             <span className="text-muted">Rejected Applications</span>
             <span className="badge badge-red">{stats.rejected}</span>
           </div>
@@ -1387,14 +1643,14 @@ function AdminStatsPage() {
 
         <div className="card">
           <div className="card-title">Regulatory Framework Status</div>
-          <div style={{ marginTop: 14 }}>
+          <div style={{ marginTop: 16 }}>
             {[
               ["RBI Digital Lending Guidelines", "100% Compliant"],
               ["Key Fact Statement (KFS) Pre-Generation", "Enforced Server-Side"],
               ["FLDG Cap 5% Limit", "Active Enforcement"],
               ["Direct Lender → Borrower Funds Flow", "No Platform Pooling"],
             ].map(([rule, status]) => (
-              <div key={rule} className="flex justify-between items-center" style={{ marginBottom: 8, fontSize: 12 }}>
+              <div key={rule} className="flex justify-between items-center" style={{ marginBottom: 10, fontSize: 12 }}>
                 <span className="text-muted">{rule}</span>
                 <span className="badge badge-green">✓ {status}</span>
               </div>
@@ -1404,7 +1660,7 @@ function AdminStatsPage() {
       </div>
 
       <div className="card">
-        <div className="card-title" style={{ marginBottom: 12 }}>Recent System Activity</div>
+        <div className="card-title" style={{ marginBottom: 14 }}>Recent System Activity</div>
         <div className="table-wrap">
           <table>
             <thead>
@@ -1453,7 +1709,7 @@ function ComplianceAuditPage() {
         if (mounted) setData(res);
       } catch (e) {
         if (mounted) setError(e.message);
-      } finale: {
+      } finally {
         if (mounted) setLoading(false);
       }
     })();
@@ -1498,7 +1754,7 @@ function ComplianceAuditPage() {
         </div>
         <div className="stat-card">
           <div className="stat-label">Compliance Blockers</div>
-          <div className="stat-value" style={{ color: complianceLogs.failures > 0 ? T.red : T.green }}>
+          <div className="stat-value" style={{ color: complianceLogs.failures > 0 ? "var(--red)" : "var(--green)" }}>
             {complianceLogs.failures}
           </div>
           <div className="stat-delta">Blocked Non-Compliant Actions</div>
@@ -1506,7 +1762,7 @@ function ComplianceAuditPage() {
       </div>
 
       <div className="card">
-        <div className="card-title" style={{ marginBottom: 12 }}>Lender FLDG Exposure & Cap Audit</div>
+        <div className="card-title" style={{ marginBottom: 14 }}>Lender FLDG Exposure & Cap Audit</div>
         <div className="table-wrap">
           <table>
             <thead>
@@ -1531,10 +1787,10 @@ function ComplianceAuditPage() {
                   <td className="td-mono text-amber">{formatINR(l.fldgExposure)}</td>
                   <td className="td-mono">{formatINR(l.capLimit)}</td>
                   <td className="td-mono">
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ display: "flex", items: "center", gap: 8 }}>
                       <span>{l.utilizationPct}%</span>
                       <div className="gauge-container" style={{ width: 60, height: 6, margin: 0 }}>
-                        <div className="gauge-fill" style={{ width: `${l.utilizationPct}%`, background: l.utilizationPct > 90 ? T.red : T.green }} />
+                        <div className="gauge-fill" style={{ width: `${l.utilizationPct}%`, background: l.utilizationPct > 90 ? "var(--red)" : "var(--green)" }} />
                       </div>
                     </div>
                   </td>
@@ -1603,7 +1859,7 @@ function OnboardLenderPage({ onSuccess }) {
   };
 
   return (
-    <div style={{ maxWidth: 640, margin: "0 auto" }}>
+    <div style={{ maxWidth: 660, margin: "0 auto" }}>
       <div className="section-header">
         <div className="section-title">Onboard New Lending Partner</div>
         <span className="badge badge-green">ADMIN Portal</span>
@@ -1672,7 +1928,7 @@ function OnboardLenderPage({ onSuccess }) {
 
         <div className="form-group">
           <label className="form-label">Supported Loan Purposes</label>
-          <div className="flex gap-2" style={{ flexWrap: "wrap", marginTop: 4 }}>
+          <div className="flex gap-2" style={{ flexWrap: "wrap", marginTop: 6 }}>
             {["personal", "consumer", "education", "medical", "emergency", "sme", "working_capital"].map((p) => (
               <button
                 key={p}
@@ -1686,7 +1942,7 @@ function OnboardLenderPage({ onSuccess }) {
           </div>
         </div>
 
-        <div className="grid-3 mb-4">
+        <div className="grid-3 mb-4" style={{ marginTop: 16 }}>
           <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
             <input type="checkbox" checked={form.ocenEnabled} onChange={(e) => update("ocenEnabled", e.target.checked)} />
             <span className="text-sm">OCEN 4.0 Protocol</span>
@@ -1754,7 +2010,7 @@ function LendersPage({ lenders, loading }) {
                 <td><span className={`badge ${l.type === "Bank" ? "badge-green" : "badge-blue"}`}>{l.type}</span></td>
                 <td className="td-mono text-green">{l.interestRate}%</td>
                 <td className="td-mono text-sm">{formatINR(l.minAmount)} – {formatINR(l.maxAmount)}</td>
-                <td className="td-mono" style={{ color: l.minCibilScore >= 700 ? T.amber : T.green }}>{l.minCibilScore}</td>
+                <td className="td-mono" style={{ color: l.minCibilScore >= 700 ? "var(--amber)" : "var(--green)" }}>{l.minCibilScore}</td>
                 <td className="td-mono">{(l.maxDti * 100).toFixed(0)}%</td>
                 <td><span className={`badge ${l.disbursalTime === "T+0" ? "badge-green" : l.disbursalTime === "T+1" ? "badge-blue" : "badge-muted"}`}>{l.disbursalTime}</span></td>
                 <td className="text-sm text-muted">{l.supportedPurposes.join(", ")}</td>
@@ -1764,17 +2020,17 @@ function LendersPage({ lenders, loading }) {
         </table>
       </div>
 
-      <div className="section-title" style={{ margin: "24px 0 12px" }}>Protocol Integrations</div>
+      <div className="section-title" style={{ margin: "28px 0 14px" }}>Protocol Integrations</div>
       <div className="grid-2">
         {lenders.map((l) => (
           <div key={l.id} className="card card-sm">
-            <div className="card-title" style={{ marginBottom: 10 }}>{l.lenderName} ({l.id})</div>
+            <div className="card-title" style={{ marginBottom: 12 }}>{l.lenderName} ({l.id})</div>
             {[
               ["OCEN 4.0 Protocol Integration", l.ocenEnabled],
               ["Account Aggregator (AA) Fetch", l.aaEnabled],
               ["NACH / eMandate Repayment", l.nachEnabled],
             ].map(([label, status]) => (
-              <div key={label} className="flex justify-between items-center" style={{ marginBottom: 6 }}>
+              <div key={label} className="flex justify-between items-center" style={{ marginBottom: 8 }}>
                 <span className="text-sm text-muted">{label}</span>
                 <span className={`badge ${status ? "badge-green" : "badge-amber"}`}>{status ? "✓ Integrated" : "⏳ Pending"}</span>
               </div>
@@ -1788,12 +2044,14 @@ function LendersPage({ lenders, loading }) {
 
 // ─── APP SHELL ─────────────────────────────────────────────────────
 export default function App() {
+  const [theme, toggleTheme] = useTheme();
   const [page, setPage] = useState("dashboard");
   const [auth, setAuth] = useState(null);
   const [applications, setApplications] = useState([]);
   const [lenders, setLenders] = useState([]);
   const [bootLoading, setBootLoading] = useState(false);
   const [bootError, setBootError] = useState(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const refreshAll = useCallback(async () => {
     setBootLoading(true);
@@ -1832,6 +2090,7 @@ export default function App() {
     setApplications([]);
     setLenders([]);
     setPage("dashboard");
+    setMobileNavOpen(false);
   };
 
   const handleNewApp = async (payload) => {
@@ -1847,7 +2106,7 @@ export default function App() {
     return (
       <>
         <style>{styles}</style>
-        <LoginPage onLogin={handleLogin} />
+        <LoginPage onLogin={handleLogin} theme={theme} onToggleTheme={toggleTheme} />
       </>
     );
   }
@@ -1901,7 +2160,11 @@ export default function App() {
     <>
       <style>{styles}</style>
       <div className="app">
-        <aside className="sidebar">
+        <div
+          className={`mobile-overlay ${mobileNavOpen ? "mobile-open" : ""}`}
+          onClick={() => setMobileNavOpen(false)}
+        />
+        <aside className={`sidebar ${mobileNavOpen ? "mobile-open" : ""}`}>
           <div className="sidebar-logo">
             <div className="logo-mark">
               <div className="logo-icon">V</div>
@@ -1917,14 +2180,17 @@ export default function App() {
               <button
                 key={item.id}
                 className={`nav-item ${page === item.id ? "active" : ""}`}
-                onClick={() => setPage(item.id)}
+                onClick={() => {
+                  setPage(item.id);
+                  setMobileNavOpen(false);
+                }}
               >
                 <span className="nav-icon">{item.icon}</span>
                 {item.label}
               </button>
             ))}
 
-            <div className="nav-section-label" style={{ marginTop: 14 }}>India Stack</div>
+            <div className="nav-section-label" style={{ marginTop: 18 }}>India Stack</div>
             {[
               { icon: "🔗", label: "AA Consents" },
               { icon: "📋", label: "CIBIL Pulls" },
@@ -1946,15 +2212,31 @@ export default function App() {
 
         <main className="main">
           <div className="topbar">
-            <div>
-              <div className="page-title">{pageMeta[page]?.title}</div>
-              <div className="page-subtitle">{pageMeta[page]?.subtitle}</div>
+            <div className="topbar-left">
+              <button
+                className="mobile-nav-toggle"
+                onClick={() => setMobileNavOpen(!mobileNavOpen)}
+                aria-label="Toggle navigation menu"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  {mobileNavOpen ? (
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  ) : (
+                    <path d="M4 6h16M4 12h16M4 18h16" />
+                  )}
+                </svg>
+              </button>
+              <div>
+                <div className="page-title">{pageMeta[page]?.title}</div>
+                <div className="page-subtitle">{pageMeta[page]?.subtitle}</div>
+              </div>
             </div>
             <div className="topbar-actions">
               <span className={`badge ${roleBadge}`}>
                 {role} · {auth.user.username} {auth.user.lenderId ? `(${auth.user.lenderId})` : ""}
               </span>
               <span className="badge badge-green">● Operational</span>
+              <ThemeToggle theme={theme} onToggle={toggleTheme} />
               <button className="btn btn-sm btn-ghost" onClick={handleLogout}>Logout</button>
             </div>
           </div>
@@ -1968,7 +2250,7 @@ export default function App() {
             )}
             {bootLoading ? (
               <div className="empty card">
-                <div className="spinner" style={{ margin: "0 auto 12px" }} />
+                <div className="spinner" style={{ margin: "0 auto 14px" }} />
                 <div className="empty-text">Syncing marketplace data…</div>
               </div>
             ) : (

@@ -33,7 +33,7 @@ router.post(
         dlaId: user.dlaId,
         lenderId: user.lenderId,
       },
-      process.env.JWT_SECRET,
+      process.env.JWT_SECRET || "vantage_credit_secret_key_2026",
       { expiresIn: JWT_EXPIRES_IN }
     );
     return res.json({

@@ -37,8 +37,17 @@ async function seedUsers() {
 
 async function connectDB() {
   const uri = process.env.MONGODB_URI || "mongodb://localhost:27017/vantage_credit";
-  await mongoose.connect(uri, { serverSelectionTimeoutMS: 10000 });
-  console.log("[db] connected:", uri);
+  try {
+    await mongoose.connect(uri, { serverSelectionTimeoutMS: 2000 });
+    console.log("[db] connected to MongoDB:", uri);
+  } catch (err) {
+    console.log("[db] local MongoDB not reachable, starting mongodb-memory-server...");
+    const { MongoMemoryServer } = require("mongodb-memory-server");
+    const mongod = await MongoMemoryServer.create();
+    const memUri = mongod.getUri();
+    await mongoose.connect(memUri);
+    console.log("[db] connected to in-memory MongoDB:", memUri);
+  }
   await seedUsers();
   return mongoose.connection;
 }

@@ -1,4 +1,4 @@
-# Vantage Credit — Embedded Credit Marketplace (MERN)
+# EmbedCredit — Embedded Credit Marketplace (MERN)
 
 RBI-compliant (Digital Lending Guidelines 2022) marketplace that matches
 borrower applications originated by Digital Lending Apps (DLAs) to eligible

@@ -2300,6 +2300,1292 @@ function LendersPage({ lenders, loading }) {
   );
 }
 
+// ─── CONSUMER PAGES ───────────────────────────────────────────────
+
+// ÔöÇÔöÇÔöÇ AA CONSENTS PAGE ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+function AAConsentsPage() {
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [revokedOpen, setRevokedOpen] = useState(false);
+
+  const consentLogs = [
+    { pan: "ABCPS1234D", consentAt: "2024-01-15T10:02:14Z", expiry: "2024-07-14T10:02:14Z", fetched: true, status: "active" },
+    { pan: "PQRRM5678K", consentAt: "2024-01-16T09:18:05Z", expiry: "2024-07-16T09:18:05Z", fetched: true, status: "active" },
+    { pan: "XYZAP9012L", consentAt: "2024-01-14T11:33:41Z", expiry: "2024-07-14T11:33:41Z", fetched: true, status: "active" },
+    { pan: "ABCPA9999K", consentAt: "2024-01-12T14:50:00Z", expiry: "2024-07-12T14:50:00Z", fetched: false, status: "expired" },
+    { pan: "CDEFM4567N", consentAt: "2024-01-10T08:22:11Z", expiry: "2024-07-10T08:22:11Z", fetched: true, status: "expired" },
+  ];
+
+  const principles = [
+    { title: "1. User Consent", body: "No financial data may be fetched without explicit, informed, and revocable consent from the borrower. The consent must clearly state which data is being requested, for what purpose, and for how long it will be retained. On this platform, AA consent is captured during loan application and logged with a timestamp." },
+    { title: "2. Data Minimisation", body: "Only the minimum data necessary for the stated purpose may be fetched. A lending platform cannot request transaction history unrelated to credit decisioning, nor can it pull data for future products without fresh consent. Each data request must map to a specific underwriting variable." },
+    { title: "3. Purpose Limitation", body: "Data fetched via the AA framework may only be used for the specific purpose stated at the time of consent. On this platform, that purpose is strictly credit decisioning ÔÇö matching the borrower to eligible lenders. Using AA data for marketing, cross-selling, or profiling is a violation of RBI guidelines." },
+    { title: "4. Storage Limitation", body: "Fetched data must not be retained beyond the period necessary for the stated purpose. On this platform, all AA-sourced bank statement data is automatically purged after 180 days. AnyÕë»µ£¼ stored in intermediary systems must also be deleted within the same window." },
+    { title: "5. Accuracy", body: "The platform must take reasonable steps to ensure that the financial data used for decisioning is accurate and up-to-date. Credit decisions must not be based on stale or incomplete data. Re-fetching is triggered only with fresh consent and timestamp." },
+    { title: "6. Integrity", body: "Data fetched through the AA network must be protected against unauthorised access, accidental loss, or destruction. All AA data in transit and at rest must be encrypted. Access controls must ensure only the lending engine and authorised compliance officers can view raw statement data." },
+    { title: "7. Accountability", body: "The DLA (Digital Lending App) is accountable for every data access made through the AA network. Each consent grant, data fetch, and deletion must be logged in an immutable audit trail. RBI examiners can request this audit trail at any time to verify compliance." },
+  ];
+
+  return (
+    <div>
+      <div className="card mb-4">
+        <div className="section-header">
+          <div className="section-title">Consent Rules ÔÇö What Can & Cannot Be Fetched</div>
+          <span className="badge badge-green">RBI AA Framework</span>
+        </div>
+        <div className="grid-2">
+          <div className="card card-sm" style={{ borderLeft: "3px solid var(--green)" }}>
+            <div className="card-title" style={{ color: "var(--green)", marginBottom: 10 }}>Permitted Data</div>
+            {["Bank statements (6ÔÇô12 months)", "Salary / income credit patterns", "UPI transaction history", "Recurring deposit patterns", "Loan account balances"].map((item) => (
+              <div key={item} style={{ fontSize: 12, color: "var(--text-secondary)", padding: "4px 0", display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ color: "var(--green)" }}>Ô£ô</span> {item}
+              </div>
+            ))}
+          </div>
+          <div className="card card-sm" style={{ borderLeft: "3px solid var(--red)" }}>
+            <div className="card-title" style={{ color: "var(--red)", marginBottom: 10 }}>Prohibited Data</div>
+            {["Aadhaar biometrics", "Raw account credentials / passwords", "Aadhaar OTP / eKYC raw XML", "Debit card CVV / PIN", "Tax returns beyond stated purpose"].map((item) => (
+              <div key={item} style={{ fontSize: 12, color: "var(--text-secondary)", padding: "4px 0", display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ color: "var(--red)" }}>Ô£ù</span> {item}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="grid-2" style={{ marginTop: 14 }}>
+          <div className="card card-sm">
+            <div className="card-title" style={{ marginBottom: 8 }}>Retention Period</div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>All AA-sourced data is <strong style={{ color: "var(--text-primary)" }}>automatically deleted after 180 days</strong>. No extensions are permitted. Deletion is logged and auditable.</div>
+          </div>
+          <div className="card card-sm">
+            <div className="card-title" style={{ marginBottom: 8 }}>Purpose Limitation</div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Data is used <strong style={{ color: "var(--text-primary)" }}>exclusively for credit decisioning</strong> ÔÇö matching borrower eligibility against onboarded lenders. No marketing, profiling, or secondary use.</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="section-header">
+          <div className="section-title">Consent Log</div>
+          <span className="badge badge-muted">{consentLogs.length} Records</span>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Borrower PAN</th>
+                <th>Consent Given At</th>
+                <th>Expiry Date</th>
+                <th>Data Fetched</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {consentLogs.map((row) => (
+                <tr key={row.pan + row.consentAt}>
+                  <td className="td-mono td-primary">{row.pan}</td>
+                  <td className="td-mono">{new Date(row.consentAt).toLocaleString("en-IN")}</td>
+                  <td className="td-mono">{new Date(row.expiry).toLocaleDateString("en-IN")}</td>
+                  <td><span className={`badge ${row.fetched ? "badge-green" : "badge-muted"}`}>{row.fetched ? "Yes" : "No"}</span></td>
+                  <td><span className={`badge ${row.status === "active" ? "badge-green" : "badge-red"}`}>{row.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="section-header" style={{ cursor: "pointer" }} onClick={() => setRulesOpen(!rulesOpen)}>
+          <div className="section-title">AA Framework Rules ÔÇö 7 RBI-Mandated Principles</div>
+          <span className="badge badge-blue">{rulesOpen ? "Ôû¥ Collapse" : "Ôû© Expand"}</span>
+        </div>
+        {rulesOpen && (
+          <div style={{ paddingTop: 4 }}>
+            {principles.map((p) => (
+              <div key={p.title} className="card card-sm" style={{ marginBottom: 10 }}>
+                <div className="card-title" style={{ marginBottom: 6 }}>{p.title}</div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>{p.body}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{ cursor: "pointer" }} onClick={() => setRevokedOpen(!revokedOpen)}>
+        <div className="section-header" style={{ marginBottom: revokedOpen ? 14 : 0 }}>
+          <div className="section-title">What Happens If Consent Is Revoked?</div>
+          <span className="badge badge-amber">{revokedOpen ? "Ôû¥ Collapse" : "Ôû© Expand"}</span>
+        </div>
+        {revokedOpen && (
+          <div className="card card-sm" style={{ background: "var(--red-soft)", border: "1px solid var(--red-border)" }}>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+              <strong style={{ color: "var(--red)" }}>Data Deletion Obligation (24 Hours):</strong> When a borrower revokes AA consent, the platform must cease all data access immediately and <strong>permanently delete all fetched data within 24 hours</strong>. This includes raw bank statement data, derived summaries, and any copies stored in intermediary caches. The deletion must be logged with a timestamp and made available for audit. After deletion, the loan application may still proceed using only non-AA data (CIBIL score, self-declared income), but the borrower must be informed that their eligibility assessment will be limited.
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ÔöÇÔöÇÔöÇ CIBIL PULLS PAGE ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+function CibilPullsPage() {
+  const [borrowerRightsOpen, setBorrowerRightsOpen] = useState(false);
+
+  const pullLogs = [
+    { pullId: "CP-0001", pan: "ABCPS1234D", type: "hard", score: 740, pulledAt: "2024-01-15T10:05:00Z", triggeredBy: "DLA-001", status: "success" },
+    { pullId: "CP-0002", pan: "PQRRM5678K", type: "hard", score: 660, pulledAt: "2024-01-16T09:20:00Z", triggeredBy: "DLA-002", status: "success" },
+    { pullId: "CP-0003", pan: "XYZAP9012L", type: "hard", score: 710, pulledAt: "2024-01-14T11:35:00Z", triggeredBy: "DLA-001", status: "success" },
+    { pullId: "CP-0004", pan: "ABCPA9999K", type: "soft", score: 580, pulledAt: "2024-01-12T14:52:00Z", triggeredBy: "SYSTEM", status: "success" },
+    { pullId: "CP-0005", pan: "CDEFM4567N", type: "hard", score: 695, pulledAt: "2024-01-10T08:25:00Z", triggeredBy: "DLA-001", status: "failed" },
+    { pullId: "CP-0006", pan: "ABCPS1234D", type: "soft", score: 740, pulledAt: "2024-01-20T11:00:00Z", triggeredBy: "SYSTEM", status: "success" },
+  ];
+
+  const scoreBands = [
+    { range: "300ÔÇô549", label: "Poor", color: "var(--red)", bg: "var(--red-soft)", border: "var(--red-border)", meaning: "Loan applications will be rejected by all onboarded lenders. Borrower is considered high-risk." },
+    { range: "550ÔÇô649", label: "Fair", color: "var(--amber)", bg: "var(--amber-soft)", border: "var(--amber-border)", meaning: "Only DMI Finance (min CIBIL 620) may consider. Very limited lender options on this platform." },
+    { range: "650ÔÇô699", label: "Average", color: "var(--amber)", bg: "var(--amber-soft)", border: "var(--amber-border)", meaning: "CreditSaison and DMI Finance eligible. HDFC Bank requires 720+ ÔÇö not eligible. Ugro requires 680+ ÔÇö borderline." },
+    { range: "700ÔÇô749", label: "Good", color: "var(--green)", bg: "var(--green-soft)", border: "var(--green-border)", meaning: "Eligible for most lenders. HDFC Bank requires 720+ ÔÇö just below threshold for some products." },
+    { range: "750ÔÇô799", label: "Very Good", color: "var(--green)", bg: "var(--green-soft)", border: "var(--green-border)", meaning: "All 4 lenders eligible. Access to best interest rates (HDFC 10.75% p.a.). Strong negotiating position." },
+    { range: "800ÔÇô900", label: "Excellent", color: "var(--green)", bg: "var(--green-soft)", border: "var(--green-border)", meaning: "All lenders eligible with preferential pricing. Lowest DTI thresholds apply. Premium borrower tier." },
+  ];
+
+  return (
+    <div>
+      <div className="card mb-4">
+        <div className="section-header">
+          <div className="section-title">Pull Policy Rules</div>
+          <span className="badge badge-green">RBI Bureau Guidelines</span>
+        </div>
+        <div className="grid-2">
+          <div className="card card-sm">
+            <div className="card-title" style={{ marginBottom: 10 }}>When a Pull Is Triggered</div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+              <div style={{ marginBottom: 6 }}><strong style={{ color: "var(--green)" }}>Ô£ô On application submission only</strong> ÔÇö CIBIL pull occurs after the borrower explicitly submits a loan application with valid KYC.</div>
+              <div style={{ marginBottom: 6 }}><strong style={{ color: "var(--red)" }}>Ô£ù Never speculatively</strong> ÔÇö The platform cannot pre-pull scores for marketing, pre-qualification, or portfolio monitoring purposes.</div>
+              <div><strong style={{ color: "var(--text-primary)" }}>Borrower notification:</strong> The borrower is informed that a hard inquiry will appear on their credit report before the pull is executed.</div>
+            </div>
+          </div>
+          <div className="card card-sm">
+            <div className="card-title" style={{ marginBottom: 10 }}>Hard vs Soft Inquiry</div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+              <div style={{ marginBottom: 8 }}>
+                <span className="badge badge-red" style={{ marginRight: 6 }}>Hard Pull</span>
+                Triggered on application submission. Visible to all lenders on the borrower's report. Reduces score by 5ÔÇô10 points temporarily.
+              </div>
+              <div>
+                <span className="badge badge-blue" style={{ marginRight: 6 }}>Soft Pull</span>
+                Internal system checks for monitoring. Not visible to other lenders. No impact on credit score.
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="card card-sm" style={{ marginTop: 14, borderLeft: "3px solid var(--amber)" }}>
+          <div className="card-title" style={{ marginBottom: 8 }}>Frequency Cap</div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+            Maximum <strong style={{ color: "var(--text-primary)" }}>1 hard pull per borrower per 90 days</strong>. If a second application is submitted within this window, the previously pulled score is reused (with a fresh consent). This prevents score erosion from repeated applications across multiple DLAs.
+          </div>
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="section-header">
+          <div className="section-title">Pull Log</div>
+          <span className="badge badge-muted">{pullLogs.length} Pulls Recorded</span>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Pull ID</th>
+                <th>Borrower PAN</th>
+                <th>Pull Type</th>
+                <th>Score Returned</th>
+                <th>Pulled At</th>
+                <th>Triggered By</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pullLogs.map((row) => (
+                <tr key={row.pullId}>
+                  <td className="td-mono td-primary">{row.pullId}</td>
+                  <td className="td-mono">{row.pan}</td>
+                  <td><span className={`badge ${row.type === "hard" ? "badge-red" : "badge-blue"}`}>{row.type}</span></td>
+                  <td className="td-mono" style={{ fontWeight: 600, color: row.score >= 700 ? "var(--green)" : row.score >= 650 ? "var(--amber)" : "var(--red)" }}>{row.score}</td>
+                  <td className="td-mono">{new Date(row.pulledAt).toLocaleString("en-IN")}</td>
+                  <td className="td-mono">{row.triggeredBy}</td>
+                  <td><span className={`badge ${row.status === "success" ? "badge-green" : "badge-red"}`}>{row.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="section-header" style={{ cursor: "pointer" }} onClick={() => setBorrowerRightsOpen(!borrowerRightsOpen)}>
+          <div className="section-title">Borrower Rights</div>
+          <span className="badge badge-blue">{borrowerRightsOpen ? "Ôû¥ Collapse" : "Ôû© Expand"}</span>
+        </div>
+        {borrowerRightsOpen && (
+          <div className="grid-3">
+            <div className="card card-sm" style={{ textAlign: "center", borderLeft: "3px solid var(--primary)" }}>
+              <div style={{ fontSize: 24, marginBottom: 8 }}>ÔÜû´©Å</div>
+              <div className="card-title" style={{ marginBottom: 6 }}>Right to Dispute</div>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>If the CIBIL score returned is inaccurate, the borrower can raise a dispute directly with the bureau. The platform must not block a loan application while a dispute is pending resolution.</div>
+            </div>
+            <div className="card card-sm" style={{ textAlign: "center", borderLeft: "3px solid var(--green)" }}>
+              <div style={{ fontSize: 24, marginBottom: 8 }}>­ƒôè</div>
+              <div className="card-title" style={{ marginBottom: 6 }}>Right to See Score</div>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>Every borrower has the right to receive a free credit report from CIBIL once per calendar year. This platform must display the pulled score to the borrower within 24 hours of the pull.</div>
+            </div>
+            <div className="card card-sm" style={{ textAlign: "center", borderLeft: "3px solid var(--amber)" }}>
+              <div style={{ fontSize: 24, marginBottom: 8 }}>­ƒöì</div>
+              <div className="card-title" style={{ marginBottom: 6 }}>Right to Know Who Pulled</div>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>The borrower must be notified which DLA or lender initiated the bureau pull. All pull requests are logged with the requesting entity ID and timestamp for full transparency.</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="section-header">
+          <div className="section-title">CIBIL Score Band Reference</div>
+          <span className="badge badge-muted">Platform Eligibility Guide</span>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Score Range</th>
+                <th>Band</th>
+                <th>Platform Eligibility</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scoreBands.map((band) => (
+                <tr key={band.range}>
+                  <td className="td-mono td-primary">{band.range}</td>
+                  <td><span className="badge" style={{ background: band.bg, color: band.color, border: `1px solid ${band.border}` }}>{band.label}</span></td>
+                  <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{band.meaning}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ÔöÇÔöÇÔöÇ OCEN 4.0 PAGE ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+function OcenPage() {
+  const [devNotesOpen, setDevNotesOpen] = useState(false);
+
+  const lenderIntegrations = [
+    { lender: "CreditSaison India", id: "L001", ocenVersion: "4.0", auth: "OAuth 2.0 + API Key", sandbox: "passed", production: "active", lastPing: "2024-01-20T10:30:00Z" },
+    { lender: "Ugro Capital", id: "L002", ocenVersion: "ÔÇö", auth: "ÔÇö", sandbox: "not_started", production: "not_started", lastPing: null },
+    { lender: "HDFC Bank", id: "L003", ocenVersion: "4.0", auth: "OAuth 2.0 + mTLS", sandbox: "passed", production: "active", lastPing: "2024-01-20T09:45:00Z" },
+    { lender: "DMI Finance", id: "L004", ocenVersion: "ÔÇö", auth: "ÔÇö", sandbox: "not_started", production: "not_started", lastPing: null },
+  ];
+
+  return (
+    <div>
+      <div className="card mb-4">
+        <div className="section-header">
+          <div className="section-title">What Is OCEN 4.0?</div>
+          <span className="badge badge-green">RBI Open Protocol</span>
+        </div>
+        <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: 14 }}>
+          <p style={{ marginBottom: 12 }}>The Open Credit Enablement Network (OCEN) is a protocol introduced by the Reserve Bank of India (RBI) to standardise how credit products are offered, distributed, and serviced across digital platforms. OCEN defines a common API contract between loan aggregators (marketplaces), lenders (banks/NBFCs), and technology providers ÔÇö eliminating proprietary integrations that create vendor lock-in and slow down credit disbursal.</p>
+          <p style={{ marginBottom: 12 }}>RBI introduced OCEN to solve the fragmentation problem in Indian digital lending: every DLA had to build separate integrations with each lender, leading to inconsistent borrower experiences, duplicated compliance work, and long onboarding cycles for new lending partners. OCEN creates a single interoperable layer where loan objects, repayment mandates, and bureau data follow a standardised format.</p>
+          <p>On this platform, Vantage Credit operates as a <strong style={{ color: "var(--text-primary)" }}>Loan Agent Network (LAN)</strong> under the OCEN protocol. As a LAN, we are responsible for aggregating borrower applications, matching them against eligible lenders via the Credit Engine, and forwarding standardised OCEN loan objects. The lenders then make independent underwriting decisions and disburse directly to the borrower ÔÇö maintaining the direct funds flow mandated by RBI DL guidelines.</p>
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="section-header">
+          <div className="section-title">Protocol Rules</div>
+          <span className="badge badge-blue">OCEN 4.0 Specification</span>
+        </div>
+        <div className="grid-2">
+          <div className="card card-sm">
+            <div className="card-title" style={{ marginBottom: 10 }}>Mandatory Fields in OCEN Loan Object</div>
+            {["loanId (UUID)", "borrowerId (PAN-based)", "loanAmount (INR)", "interestRate (p.a.)", "tenureMonths", "purpose (enum)", "repaymentFrequency", "lenderId", "dlaId", "consentTimestamp", "idempotencyKey"].map((f) => (
+              <div key={f} style={{ fontSize: 12, color: "var(--text-secondary)", padding: "3px 0", fontFamily: "var(--font-mono)" }}>ÔÇó {f}</div>
+            ))}
+          </div>
+          <div>
+            <div className="card card-sm" style={{ marginBottom: 14 }}>
+              <div className="card-title" style={{ marginBottom: 10 }}>Standardised Error Codes</div>
+              {[
+                ["OCEN_001", "Missing mandatory field"],
+                ["OCEN_002", "Invalid borrower identity"],
+                ["OCEN_003", "Consent expired or revoked"],
+                ["OCEN_004", "Duplicate idempotency key"],
+                ["OCEN_005", "Lender timeout (>30s)"],
+                ["OCEN_006", "Lender capacity exceeded"],
+              ].map(([code, desc]) => (
+                <div key={code} className="kfs-row" style={{ fontSize: 12 }}>
+                  <span className="kfs-key" style={{ fontFamily: "var(--font-mono)" }}>{code}</span>
+                  <span style={{ color: "var(--text-secondary)" }}>{desc}</span>
+                </div>
+              ))}
+            </div>
+            <div className="card card-sm" style={{ borderLeft: "3px solid var(--amber)" }}>
+              <div className="card-title" style={{ marginBottom: 8 }}>Timeout & Idempotency</div>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                <div style={{ marginBottom: 4 }}>ÔÇó Lender must respond within <strong style={{ color: "var(--text-primary)" }}>30 seconds</strong>. Failure triggers automatic timeout handling.</div>
+                <div>ÔÇó All OCEN requests require a unique <strong style={{ color: "var(--text-primary)" }}>idempotencyKey</strong>. Retries with the same key must return the original result, not create duplicate loan objects.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="section-header">
+          <div className="section-title">Lender Integration Checklist</div>
+          <span className="badge badge-muted">{lenderIntegrations.length} Lenders</span>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Lender</th>
+                <th>OCEN Version</th>
+                <th>Auth Method</th>
+                <th>Sandbox</th>
+                <th>Production</th>
+                <th>Last Ping</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lenderIntegrations.map((l) => (
+                <tr key={l.id}>
+                  <td className="td-primary">{l.lender}</td>
+                  <td className="td-mono">{l.ocenVersion}</td>
+                  <td className="text-sm">{l.auth}</td>
+                  <td><span className={`badge ${l.sandbox === "passed" ? "badge-green" : "badge-muted"}`}>{l.sandbox === "passed" ? "Ô£ô Passed" : "Not Started"}</span></td>
+                  <td><span className={`badge ${l.production === "active" ? "badge-green" : "badge-muted"}`}>{l.production === "active" ? "ÔùÅ Live" : "Not Started"}</span></td>
+                  <td className="td-mono">{l.lastPing ? new Date(l.lastPing).toLocaleDateString("en-IN") : "ÔÇö"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="section-header">
+          <div className="section-title">OCEN Message Flow</div>
+          <span className="badge badge-blue">Request ÔåÆ Response Lifecycle</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 8px", overflowX: "auto", gap: 4 }}>
+          {[
+            { label: "DLA", sub: "Originates Loan" },
+            null,
+            { label: "Marketplace", sub: "Vantage Credit" },
+            null,
+            { label: "OCEN Router", sub: "Protocol Layer" },
+            null,
+            { label: "Lender LOS", sub: "Underwriting" },
+            null,
+            { label: "Response", sub: "Approve / Reject" },
+          ].map((node, i) =>
+            node === null ? (
+              <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 60 }}>
+                <div style={{ width: 40, height: 2, background: "var(--border-color)" }} />
+                <div style={{ fontSize: 9, color: "var(--text-muted)", marginTop: 4, textAlign: "center", whiteSpace: "nowrap" }}>
+                  {i === 1 ? "< 1s" : i === 3 ? "< 2s" : i === 5 ? "< 5s" : "< 1s"}
+                </div>
+              </div>
+            ) : (
+              <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 90 }}>
+                <div style={{
+                  background: "var(--bg-surface-elevated)", border: "1px solid var(--border-color)",
+                  borderRadius: "var(--radius-sm)", padding: "10px 14px", textAlign: "center",
+                  ...(i === 5 ? { borderColor: "var(--primary)", color: "var(--primary-text)", background: "var(--primary-soft)" } : {})
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>{node.label}</div>
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>{node.sub}</div>
+                </div>
+              </div>
+            )
+          )}
+        </div>
+        <div className="compliance-strip">
+          <span>ÔÜí</span>
+          <div><strong>Total SLA:</strong> End-to-end response must arrive within 30 seconds. If the lender LOS does not respond, the OCEN router returns OCEN_005 (timeout) and the DLA may re-route to the next eligible lender.</div>
+        </div>
+      </div>
+
+      <div className="card" style={{ cursor: "pointer" }} onClick={() => setDevNotesOpen(!devNotesOpen)}>
+        <div className="section-header" style={{ marginBottom: devNotesOpen ? 14 : 0 }}>
+          <div className="section-title">Developer Notes ÔÇö OCEN Compliance Requirements</div>
+          <span className="badge badge-amber">{devNotesOpen ? "Ôû¥ Collapse" : "Ôû© Expand"}</span>
+        </div>
+        {devNotesOpen && (
+          <div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 14 }}>A DLA must expose the following 3 mandatory endpoints to be OCEN-compliant:</div>
+            {[
+              { endpoint: "POST /ocen/loan/create", desc: "Accepts a standardised OCEN loan object and returns a loanId. The DLA must include the borrower's AA consent token and CIBIL score in the request." },
+              { endpoint: "POST /ocen/loan/status", desc: "Called by the lender to update the application status (approved, rejected, disbursed). The DLA must acknowledge within 5 seconds and update internal state." },
+              { endpoint: "POST /ocen/mandate/register", desc: "Registers an eNACH repayment mandate against a disbursed loan. Must return mandateId and confirmation within 10 seconds." },
+            ].map((ep) => (
+              <div key={ep.endpoint} className="card card-sm" style={{ marginBottom: 10, borderLeft: "3px solid var(--primary)" }}>
+                <div className="kfs-row" style={{ border: "none", padding: 0 }}>
+                  <span className="kfs-key" style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--primary-text)" }}>{ep.endpoint}</span>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>{ep.desc}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ÔöÇÔöÇÔöÇ eNACH AUTOPAY PAGE ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+function ENachPage() {
+  const [timelineOpen, setTimelineOpen] = useState(false);
+
+  const mandates = [
+    { mandateId: "NACH-001", pan: "ABCPS1234D", bank: "HDFC Bank", emi: 13640, debitDate: "2024-02-15", status: "active" },
+    { mandateId: "NACH-002", pan: "PQRRM5678K", bank: "ICICI Bank", emi: 14120, debitDate: "2024-02-16", status: "active" },
+    { mandateId: "NACH-003", pan: "XYZAP9012L", bank: "SBI", emi: 22560, debitDate: "2024-02-14", status: "active" },
+    { mandateId: "NACH-004", pan: "ABCPA9999K", bank: "Axis Bank", emi: 8900, debitDate: "2024-02-10", status: "failed" },
+    { mandateId: "NACH-005", pan: "CDEFM4567N", bank: "Kotak Mahindra", emi: 5200, debitDate: "2024-03-01", status: "pending" },
+  ];
+
+  const failureSteps = [
+    { day: "Day 0", label: "Debit Failed", desc: "Initial NACH debit attempt fails due to insufficient funds or bank error.", color: "var(--red)", icon: "Ô£ù" },
+    { day: "Day 1", label: "Borrower Notification", desc: "SMS + email sent to borrower informing them of the failed debit and urging immediate top-up.", color: "var(--amber)", icon: "­ƒôº" },
+    { day: "Day 2", label: "Retry 1", desc: "First automatic retry of the NACH debit. If the borrower has topped up, the debit succeeds.", color: "var(--amber)", icon: "Ôå╗" },
+    { day: "Day 4", label: "Retry 2", desc: "Second retry attempt. Borrower receives a final warning SMS. Penal interest starts accruing.", color: "var(--amber)", icon: "Ôå╗" },
+    { day: "Day 6", label: "Retry 3 + Penal", desc: "Third and final retry. Penal interest applied from Day 1. If this fails, the account is flagged.", color: "var(--red)", icon: "Ôå╗" },
+    { day: "Day 7", label: "NPA Flag", desc: "Account is marked as Non-Performing Asset (NPA). Recovery process initiated. Credit score impacted.", color: "var(--red)", icon: "ÔÜá" },
+  ];
+
+  return (
+    <div>
+      <div className="card mb-4">
+        <div className="section-header">
+          <div className="section-title">What Is eNACH?</div>
+          <span className="badge badge-green">NPCI Framework</span>
+        </div>
+        <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.7 }}>
+          <p style={{ marginBottom: 12 }}>The National Automated Clearing House (NACH) is a batch electronic payment system operated by the National Payments Corporation of India (NPCI). It enables recurring collections such as loan EMIs, insurance premiums, and utility bills. In the context of digital lending, eNACH allows a lender to register a one-time mandate that authorises automatic debit of the borrower's bank account on each EMI due date ÔÇö eliminating manual payment steps and reducing missed payments.</p>
+          <p>UPI AutoPay is a newer, lighter-weight alternative built on the UPI rails. It is limited to transactions up to Ôé╣15,000 per debit and is better suited for smaller-ticket personal loans. On this platform, <strong style={{ color: "var(--text-primary)" }}>eNACH is used for loans above Ôé╣15,000</strong> where the EMI exceeds the UPI AutoPay cap, while <strong style={{ color: "var(--text-primary)" }}>UPI AutoPay is used for micro-loans and consumer durables</strong> below the threshold. Both mandate types are registered before the first disbursal and follow the same failure/retry protocol.</p>
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="section-header">
+          <div className="section-title">Mandate Rules</div>
+          <span className="badge badge-blue">eNACH Protocol</span>
+        </div>
+        <div className="grid-2">
+          {[
+            { rule: "Mandatory Pre-Disbursal Registration", detail: "The repayment mandate must be registered and confirmed before the first loan disbursal. No funds flow until the mandate is active." },
+            { rule: "Debit Only on Due Date", detail: "Debit is attempted only on the scheduled due date. No early pulls are permitted under any circumstances." },
+            { rule: "Max Debit = EMI Amount", detail: "The system can never pull more than the EMI amount. Any excess amount must be refunded within 3 working days." },
+            { rule: "SMS Notification (3 Days Before)", detail: "Borrower must receive an SMS at least 3 days before the scheduled debit date, confirming the amount and date." },
+            { rule: "Failed Debit Retry Protocol", detail: "Failed debits trigger retries after 48 hours. Maximum 3 retries are allowed. Each retry is logged and the borrower is notified." },
+            { rule: "Penal Interest from Day 1", detail: "Penal interest begins accruing from the day after the first failed debit, not after the retry cycle completes." },
+          ].map((item) => (
+            <div key={item.rule} className="card card-sm" style={{ borderLeft: "3px solid var(--primary)" }}>
+              <div className="card-title" style={{ marginBottom: 6 }}>{item.rule}</div>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>{item.detail}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="section-header">
+          <div className="section-title">Mandate Status</div>
+          <span className="badge badge-muted">{mandates.length} Mandates</span>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Mandate ID</th>
+                <th>Borrower PAN</th>
+                <th>Bank</th>
+                <th>EMI Amount</th>
+                <th>Debit Date</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mandates.map((row) => (
+                <tr key={row.mandateId}>
+                  <td className="td-mono td-primary">{row.mandateId}</td>
+                  <td className="td-mono">{row.pan}</td>
+                  <td>{row.bank}</td>
+                  <td className="td-mono">{formatINR(row.emi)}</td>
+                  <td className="td-mono">{row.debitDate}</td>
+                  <td><span className={`badge ${row.status === "active" ? "badge-green" : row.status === "pending" ? "badge-amber" : "badge-red"}`}>{row.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card mb-4">
+        <div className="section-header" style={{ cursor: "pointer" }} onClick={() => setTimelineOpen(!timelineOpen)}>
+          <div className="section-title">What Happens on Mandate Failure?</div>
+          <span className="badge badge-red">{timelineOpen ? "Ôû¥ Collapse" : "Ôû© Expand"}</span>
+        </div>
+        {timelineOpen && (
+          <div style={{ padding: "12px 0" }}>
+            {failureSteps.map((step, i) => (
+              <div key={step.day} style={{ display: "flex", gap: 14, marginBottom: i < failureSteps.length - 1 ? 0 : 0 }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 32 }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                    background: step.color, color: "white", fontSize: 14, fontWeight: 700, flexShrink: 0,
+                  }}>{step.icon}</div>
+                  {i < failureSteps.length - 1 && (
+                    <div style={{ width: 2, flex: 1, background: "var(--border-color)", minHeight: 20 }} />
+                  )}
+                </div>
+                <div style={{ paddingBottom: 18 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: step.color, textTransform: "uppercase" }}>{step.day}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{step.label}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>{step.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="section-header">
+          <div className="section-title">Borrower Protections</div>
+          <span className="badge badge-green">RBI Consumer Safeguards</span>
+        </div>
+        <div className="grid-3">
+          <div className="card card-sm" style={{ textAlign: "center", borderLeft: "3px solid var(--green)" }}>
+            <div style={{ fontSize: 24, marginBottom: 8 }}>­ƒÜ½</div>
+            <div className="card-title" style={{ marginBottom: 6 }}>Right to Cancel</div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>Borrower can cancel the eNACH mandate at least 3 days before the scheduled debit date by notifying both the platform and their bank.</div>
+          </div>
+          <div className="card card-sm" style={{ textAlign: "center", borderLeft: "3px solid var(--amber)" }}>
+            <div style={{ fontSize: 24, marginBottom: 8 }}>ÔÜû´©Å</div>
+            <div className="card-title" style={{ marginBottom: 6 }}>Right to Dispute</div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>If a debit is unauthorised or incorrect, the borrower can raise a dispute with the bank. The lender must not initiate recovery action during the dispute window.</div>
+          </div>
+          <div className="card card-sm" style={{ textAlign: "center", borderLeft: "3px solid var(--primary)" }}>
+            <div style={{ fontSize: 24, marginBottom: 8 }}>ÔÅ▒´©Å</div>
+            <div className="card-title" style={{ marginBottom: 6 }}>48-Hour Resolution SLA</div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>The bank must resolve mandate-related complaints within 48 hours. Escalation to NPCI is available if the resolution window is breached.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ÔöÇÔöÇÔöÇ APP SHELL ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+
+function ConsumerDashboardPage({ user, onNavigate }) {
+  const [creditProfile, setCreditProfile] = useState(null);
+  const [intents, setIntents] = useState([]);
+  const [offers, setOffers] = useState([]);
+  const [myLoans, setMyLoans] = useState([]);
+
+  const loadData = async () => {
+    try {
+      const [cp, intRes, loanRes] = await Promise.all([
+        api("/credit-profile").catch(() => null),
+        api("/loan-intents").catch(() => []),
+        api("/my-loans").catch(() => []),
+      ]);
+      setCreditProfile(cp);
+
+      const parsedIntents = Array.isArray(intRes) ? intRes : (intRes?.intents || intRes?.data || []);
+      setIntents(parsedIntents);
+
+      const parsedLoans = Array.isArray(loanRes) ? loanRes : (loanRes?.apps || loanRes?.loans || loanRes?.data || []);
+      setMyLoans(parsedLoans);
+
+      if (parsedIntents.length > 0) {
+        const activeIntent = parsedIntents[0];
+        const offRes = await api(`/loan-intents/${activeIntent.id}/offers`).catch(() => []);
+        const parsedOffers = Array.isArray(offRes) ? offRes : (offRes?.offers || offRes?.data || []);
+        setOffers(parsedOffers);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const categories = [
+    { id: "Shopping", icon: "🛒", label: "Shopping" },
+    { id: "Electronics", icon: "📱", label: "Electronics" },
+    { id: "Travel", icon: "✈️", label: "Travel" },
+    { id: "Healthcare", icon: "🩺", label: "Healthcare" },
+    { id: "Education", icon: "🎓", label: "Education" },
+    { id: "Home Improvement", icon: "🏠", label: "Home" },
+    { id: "Personal", icon: "👤", label: "Personal" },
+    { id: "Other", icon: "💡", label: "Other" },
+  ];
+
+  const safeOffers = Array.isArray(offers) ? offers : [];
+  const safeLoans = Array.isArray(myLoans) ? myLoans : [];
+
+  return (
+    <div>
+      {/* Welcome Banner */}
+      <div className="card mb-4" style={{ background: "linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(16,185,129,0.08) 100%)", borderColor: "var(--primary-soft)" }}>
+        <div className="flex justify-between items-center flex-wrap gap-4">
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>Welcome back, {user.fullName || user.username}!</div>
+            <div style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 4 }}>
+              Consumer Credit Profile & Marketplace Dashboard · PAN: {user.pan ? `•••••${user.pan.slice(-4)}` : "Not verified"}
+            </div>
+          </div>
+          <button className="btn btn-primary" onClick={() => onNavigate("get-credit")}>
+            ⚡ Get Credit
+          </button>
+        </div>
+      </div>
+
+      {/* Progress Flow Stepper */}
+      <div className="card mb-4">
+        <div className="section-title mb-2" style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: 0.6, color: "var(--text-muted)" }}>
+          Consumption Credit Application Stepper
+        </div>
+        <div className="flow" style={{ margin: 0 }}>
+          {[
+            { step: 1, label: "Profile", sub: "Verified Identity" },
+            { step: 2, label: "Consent", sub: "AA Active" },
+            { step: 3, label: "Credit Data", sub: `CIBIL ${creditProfile?.cibilScore || 750}` },
+            { step: 4, label: "Find Credit", sub: "Intent Category" },
+            { step: 5, label: "Compare", sub: `${safeOffers.length} Offers` },
+            { step: 6, label: "KFS", sub: "Key Fact Statement" },
+            { step: 7, label: "Lender Review", sub: "Underwriting" },
+            { step: 8, label: "Loan", sub: "Disbursed" },
+          ].map((item, idx) => (
+            <Fragment key={item.label}>
+              <div className={`flow-node ${idx <= 4 ? "flow-node-active" : ""}`}>
+                <div style={{ fontWeight: 700 }}>{item.label}</div>
+                <div className="flow-sub">{item.sub}</div>
+              </div>
+              {idx < 7 && <div className="flow-arrow">→</div>}
+            </Fragment>
+          ))}
+        </div>
+      </div>
+
+      {/* Credit Readiness System Card */}
+      <div className="card mb-4" style={{ border: "1px solid var(--primary-glow)", background: "var(--bg-surface)" }}>
+        <div className="flex justify-between items-center flex-wrap gap-3 mb-3">
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>Credit Readiness Score</div>
+            <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
+              Completeness checks required for instant marketplace underwriting
+            </div>
+          </div>
+          <span className="badge badge-green" style={{ fontSize: 13, padding: "6px 12px" }}>
+            92% Credit Ready · 1 Action Remaining
+          </span>
+        </div>
+
+        <div className="gauge-container" style={{ height: 10, marginBottom: 14 }}>
+          <div className="gauge-fill" style={{ width: "92%", background: "var(--green)" }} />
+        </div>
+
+        <div className="grid-3 text-sm gap-3">
+          <div className="flex items-center gap-2">
+            <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
+            <span>Mobile Verified (9876543210)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
+            <span>PAN Identity Verified</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
+            <span>Net Income & Obligations Added</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
+            <span>Account Aggregator (AA) Active</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
+            <span>CIBIL Bureau Score Pulled ({creditProfile?.cibilScore || 750})</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span style={{ color: "var(--amber)", fontWeight: 700 }}>⏳</span>
+            <span style={{ color: "var(--amber)", fontWeight: 600 }}>1 Action: Bank Statement Refresh</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Category Intent Cards */}
+      <div className="card mb-4">
+        <div className="section-header mb-3">
+          <div>
+            <div className="section-title">What do you need credit for?</div>
+            <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>Select a consumption category to get pre-approved credit offers</div>
+          </div>
+          <button className="btn btn-sm btn-secondary" onClick={() => onNavigate("get-credit")}>View All Categories →</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10 }}>
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => onNavigate("get-credit", { purpose: c.id })}
+              className="card"
+              style={{
+                padding: "16px 10px",
+                textAlign: "center",
+                cursor: "pointer",
+                border: "1px solid var(--border-color)",
+                background: "var(--bg-surface-elevated)",
+                transition: "all 0.2s ease"
+              }}
+            >
+              <div style={{ fontSize: 24, marginBottom: 4 }}>{c.icon}</div>
+              <div style={{ fontWeight: 600, fontSize: 12, color: "var(--text-primary)" }}>{c.label}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Available Credit Offers Preview */}
+      <div className="card mb-4">
+        <div className="section-header">
+          <div>
+            <div className="section-title">Available Credit Offers</div>
+            <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
+              {offers.length} eligible lender product(s) matching your credit need
+            </div>
+          </div>
+          {offers.length > 0 && (
+            <button className="btn btn-sm btn-primary" onClick={() => onNavigate("my-offers")}>
+              Compare & Select Offers →
+            </button>
+          )}
+        </div>
+
+        {safeOffers.length === 0 ? (
+          <div className="empty" style={{ padding: "20px 0" }}>
+            <div className="empty-text">No active credit offers generated yet.</div>
+            <button className="btn btn-sm btn-primary" style={{ marginTop: 10 }} onClick={() => onNavigate("get-credit")}>
+              Get Credit Offers →
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14, marginTop: 12 }}>
+            {safeOffers.slice(0, 3).map((off) => (
+              <div key={off.id} className="card" style={{ border: "1px solid var(--border-color)", background: "var(--bg-surface)" }}>
+                <div className="flex justify-between items-center mb-2">
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>{off.lenderName}</div>
+                  <span className="badge badge-blue">{off.disbursalTime}</span>
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "var(--primary-text)", margin: "6px 0" }}>
+                  ₹{off.amount?.toLocaleString("en-IN")}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 10 }}>
+                  Interest: <strong>{off.interestRate}% p.a.</strong> · APR: <strong>{off.APR}%</strong> · Tenure: <strong>{off.tenure}M</strong>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginBottom: 12 }}>
+                  EMI: ₹{off.EMI?.toLocaleString("en-IN")} / mo
+                </div>
+                <button className="btn btn-sm btn-primary w-full" onClick={() => onNavigate("my-offers")}>
+                  View Details & Select
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* My Active Loans */}
+      <div className="card">
+        <div className="section-header">
+          <div className="section-title">My Active Loans</div>
+          <span className="badge badge-muted">{safeLoans.length} Loans</span>
+        </div>
+        {safeLoans.length === 0 ? (
+          <div className="empty" style={{ padding: "20px 0" }}>
+            <div className="empty-text">No active loans found.</div>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>App ID</th>
+                  <th>Amount</th>
+                  <th>Purpose</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {safeLoans.map((l) => (
+                  <tr key={l.id}>
+                    <td><strong style={{ fontFamily: "var(--font-mono)" }}>{l.id}</strong></td>
+                    <td>₹{l.amount?.toLocaleString("en-IN")}</td>
+                    <td style={{ textTransform: "capitalize" }}>{l.purpose}</td>
+                    <td><span className="badge badge-green">{l.status}</span></td>
+                    <td>{new Date(l.createdAt).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ConsumerProfilePage({ user, onRefresh }) {
+  const [formData, setFormData] = useState({
+    fullName: user.fullName || "",
+    email: user.email || "",
+    mobile: user.mobile || "",
+    pan: user.pan || "",
+    dateOfBirth: user.dateOfBirth || "1994-08-15",
+    address: user.address || "102 Park Avenue, Koramangala, Bengaluru, KA",
+    employmentType: user.employmentType || "salaried",
+    employerName: user.employerName || "Tech Corp India",
+    monthlyIncome: user.monthlyIncome || 75000,
+    monthlyObligations: user.monthlyObligations || 15000,
+  });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const saveProfile = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api("/profile", { method: "PUT", body: JSON.stringify(formData) });
+      setMsg({ type: "success", text: "Profile updated successfully!" });
+      if (onRefresh) onRefresh();
+    } catch (ex) {
+      setMsg({ type: "error", text: ex.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pullBureau = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await api("/credit-profile/bureau-pull", {
+        method: "POST",
+        body: JSON.stringify({ pan: formData.pan }),
+      });
+      setMsg({ type: "success", text: `Bureau pull successful! Latest CIBIL score: ${res.bureauResult.cibilScore}` });
+      if (onRefresh) onRefresh();
+    } catch (ex) {
+      setMsg({ type: "error", text: ex.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card">
+      <div className="section-header mb-4">
+        <div>
+          <div className="section-title">Consumer Profile & KYC</div>
+          <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
+            Manage verified identity, employment, and income details (Aadhaar is never stored)
+          </div>
+        </div>
+        <button className="btn btn-sm btn-secondary" onClick={pullBureau} disabled={busy}>
+          📊 Pull Bureau Score (CIBIL)
+        </button>
+      </div>
+
+      {msg && (
+        <div className={msg.type === "error" ? "form-error mb-4" : "badge badge-green mb-4"} style={{ padding: "10px 14px", display: "block" }}>
+          {msg.text}
+        </div>
+      )}
+
+      <form onSubmit={saveProfile}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+          <div className="form-group">
+            <label className="form-label">Full Name</label>
+            <input className="form-input" value={formData.fullName} onChange={(e) => setFormData({ ...formData, fullName: e.target.value })} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Email Address</label>
+            <input className="form-input" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Mobile Number</label>
+            <input className="form-input" value={formData.mobile} onChange={(e) => setFormData({ ...formData, mobile: e.target.value })} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">PAN Number</label>
+            <input className="form-input" value={formData.pan} onChange={(e) => setFormData({ ...formData, pan: e.target.value.toUpperCase() })} maxLength={10} required />
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>PAN is stored for bureau checks. Never Aadhaar.</div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Date of Birth</label>
+            <input className="form-input" type="date" value={formData.dateOfBirth} onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Employment Type</label>
+            <select className="form-input" value={formData.employmentType} onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })}>
+              <option value="salaried">Salaried</option>
+              <option value="self_employed">Self Employed</option>
+              <option value="business">Business Owner</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Employer Name</label>
+            <input className="form-input" value={formData.employerName} onChange={(e) => setFormData({ ...formData, employerName: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Monthly Net Income (₹)</label>
+            <input className="form-input" type="number" value={formData.monthlyIncome} onChange={(e) => setFormData({ ...formData, monthlyIncome: e.target.value })} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Monthly Obligations / EMIs (₹)</label>
+            <input className="form-input" type="number" value={formData.monthlyObligations} onChange={(e) => setFormData({ ...formData, monthlyObligations: e.target.value })} required />
+          </div>
+        </div>
+
+        <div className="form-group" style={{ marginTop: 14 }}>
+          <label className="form-label">Residential Address</label>
+          <input className="form-input" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} required />
+        </div>
+
+        <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end" }}>
+          <button className="btn btn-primary" type="submit" disabled={busy}>
+            {busy ? "Saving Profile..." : "Save Profile Details"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function GetCreditPage({ initialPurpose = "Electronics", onOffersFound }) {
+  const [purpose, setPurpose] = useState(initialPurpose);
+  const [requestedAmount, setRequestedAmount] = useState(80000);
+  const [preferredTenure, setPreferredTenure] = useState(12);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const categories = [
+    "Shopping", "Electronics", "Travel", "Healthcare", "Education", "Home Improvement", "Personal", "Other"
+  ];
+  const tenures = [3, 6, 12, 18, 24, 36];
+
+  const handleCreateIntent = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      const intent = await api("/loan-intents", {
+        method: "POST",
+        body: JSON.stringify({ purpose, requestedAmount: Number(requestedAmount), preferredTenure: Number(preferredTenure) }),
+      });
+      const res = await api(`/loan-intents/${intent.id}/find-offers`, { method: "POST" });
+      if (onOffersFound) onOffersFound(intent.id, res.offers);
+    } catch (ex) {
+      setErr(ex.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card" style={{ maxWidth: 700, margin: "0 auto" }}>
+      <div className="section-header mb-4">
+        <div>
+          <div className="section-title">Specify Consumption Credit Need</div>
+          <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
+            Define your loan purpose, amount, and tenure to receive pre-approved lender offers
+          </div>
+        </div>
+        <span className="badge badge-green">Marketplace Engine</span>
+      </div>
+
+      {err && <div className="form-error mb-4">{err}</div>}
+
+      <form onSubmit={handleCreateIntent}>
+        <div className="form-group mb-4">
+          <label className="form-label">Consumption Credit Purpose</label>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8, marginTop: 6 }}>
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                className={`btn btn-sm ${purpose === cat ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setPurpose(cat)}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="form-group mb-4">
+          <div className="flex justify-between items-center mb-1">
+            <label className="form-label">Required Amount (₹)</label>
+            <strong style={{ fontSize: 16, color: "var(--primary-text)" }}>₹{Number(requestedAmount).toLocaleString("en-IN")}</strong>
+          </div>
+          <input
+            type="range"
+            min={10000}
+            max={500000}
+            step={5000}
+            value={requestedAmount}
+            onChange={(e) => setRequestedAmount(e.target.value)}
+            style={{ width: "100%", margin: "8px 0" }}
+          />
+          <input
+            className="form-input"
+            type="number"
+            value={requestedAmount}
+            onChange={(e) => setRequestedAmount(e.target.value)}
+            min={5000}
+            max={1000000}
+            required
+          />
+        </div>
+
+        <div className="form-group mb-4">
+          <label className="form-label">Preferred Tenure (Months)</label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+            {tenures.map((t) => (
+              <button
+                key={t}
+                type="button"
+                className={`btn btn-sm ${preferredTenure === t ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setPreferredTenure(t)}
+              >
+                {t} Months
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button className="btn btn-primary w-full" style={{ padding: "12px 18px", fontSize: 15 }} type="submit" disabled={busy}>
+          {busy ? "Finding Eligible Offers..." : "⚡ Find Matching Lender Offers"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function OffersComparisonPage({ intentId, onOfferSelected }) {
+  const [offers, setOffers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedKfs, setSelectedKfs] = useState(null);
+
+  const fetchOffers = async () => {
+    setLoading(true);
+    try {
+      let targetId = intentId;
+      if (!targetId) {
+        const intents = await api("/loan-intents").catch(() => []);
+        const safeIntents = Array.isArray(intents) ? intents : (intents?.intents || []);
+        if (safeIntents.length > 0) targetId = safeIntents[0].id;
+      }
+      if (targetId) {
+        const data = await api(`/loan-intents/${targetId}/offers`).catch(() => []);
+        setOffers(Array.isArray(data) ? data : (data?.offers || []));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOffers();
+  }, [intentId]);
+
+  const selectOffer = async (offerId) => {
+    try {
+      const res = await api(`/offers/${offerId}/select`, { method: "POST" });
+      setSelectedKfs(res.kfsData);
+      if (onOfferSelected) onOfferSelected(res);
+    } catch (ex) {
+      alert("Failed to select offer: " + ex.message);
+    }
+  };
+
+  return (
+    <div>
+      <div className="card mb-4">
+        <div className="section-header">
+          <div>
+            <div className="section-title">Eligible Credit Offers Comparison</div>
+            <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
+              Compare interest rates, APR, processing fees, and repayment terms transparently
+            </div>
+          </div>
+          <span className="badge badge-green">No Hidden Fees</span>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="card empty">
+          <div className="spinner" style={{ margin: "0 auto 10px" }} />
+          <div className="empty-text">Loading marketplace offers...</div>
+        </div>
+      ) : offers.length === 0 ? (
+        <div className="card empty">
+          <div className="empty-text">No offers generated for this intent yet. Create a credit need first.</div>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+          {offers.map((off) => (
+            <div key={off.id} className="card" style={{ border: "1px solid var(--border-color)", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div>
+                <div className="flex justify-between items-center mb-3">
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{off.lenderName}</div>
+                  <span className="badge badge-blue">{off.disbursalTime}</span>
+                </div>
+
+                <div style={{ fontSize: 26, fontWeight: 800, color: "var(--primary-text)", marginBottom: 12 }}>
+                  ₹{off.amount?.toLocaleString("en-IN")}
+                </div>
+
+                <div style={{ background: "var(--bg-surface-elevated)", padding: 12, borderRadius: "var(--radius-md)", marginBottom: 14 }}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: "var(--text-muted)" }}>Interest Rate:</span>
+                    <strong>{off.interestRate}% p.a.</strong>
+                  </div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: "var(--text-muted)" }}>APR (Annualized):</span>
+                    <strong>{off.APR}%</strong>
+                  </div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: "var(--text-muted)" }}>Monthly EMI:</span>
+                    <strong style={{ color: "var(--green)" }}>₹{off.EMI?.toLocaleString("en-IN")}</strong>
+                  </div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: "var(--text-muted)" }}>Processing Fee:</span>
+                    <span>₹{off.processingFee?.toLocaleString("en-IN")}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span style={{ color: "var(--text-muted)" }}>Total Repayment:</span>
+                    <span>₹{off.totalRepayment?.toLocaleString("en-IN")}</span>
+                  </div>
+                </div>
+
+                {off.eligibilityReasons && off.eligibilityReasons.length > 0 && (
+                  <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 14 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>Why you qualify:</div>
+                    {off.eligibilityReasons.map((r, i) => (
+                      <div key={i}>✓ {r}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button
+                className="btn btn-primary w-full"
+                onClick={() => selectOffer(off.id)}
+                disabled={off.status === "SELECTED"}
+              >
+                {off.status === "SELECTED" ? "✓ Offer Selected" : "Select Offer & Generate KFS"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {selectedKfs && (
+        <div className="card mt-4" style={{ border: "2px solid var(--green)" }}>
+          <div className="section-header mb-3">
+            <div className="section-title">✓ Key Fact Statement (KFS) Generated</div>
+            <span className="badge badge-green">RBI DL 2022 Mandate Compliant</span>
+          </div>
+          <pre style={{ background: "var(--bg-surface-elevated)", padding: 14, borderRadius: "var(--radius-md)", fontSize: 12, overflowX: "auto" }}>
+            {JSON.stringify(selectedKfs, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConsentsPage() {
+  const [consents, setConsents] = useState([]);
+
+  useEffect(() => {
+    api("/consents")
+      .then((res) => setConsents(Array.isArray(res) ? res : (res?.consents || [])))
+      .catch(() => setConsents([]));
+  }, []);
+
+  return (
+    <div className="card">
+      <div className="section-header mb-3">
+        <div>
+          <div className="section-title">Privacy & Consent Audit Trail</div>
+          <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
+            RBI Account Aggregator & Bureau Query consent logs (Revocable)
+          </div>
+        </div>
+        <span className="badge badge-green">Consent Governance</span>
+      </div>
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Consent ID</th>
+              <th>Type</th>
+              <th>Purpose</th>
+              <th>Provider</th>
+              <th>Status</th>
+              <th>Granted At</th>
+              <th>Expires At</th>
+            </tr>
+          </thead>
+          <tbody>
+            {consents.length === 0 ? (
+              <tr><td colSpan={7} style={{ textAlign: "center" }}>No consent logs found.</td></tr>
+            ) : (
+              consents.map((c) => (
+                <tr key={c.id}>
+                  <td><strong style={{ fontFamily: "var(--font-mono)" }}>{c.id}</strong></td>
+                  <td><span className="badge badge-blue">{c.consentType}</span></td>
+                  <td>{c.purpose}</td>
+                  <td>{c.provider}</td>
+                  <td><span className="badge badge-green">{c.status}</span></td>
+                  <td>{new Date(c.grantedAt).toLocaleDateString()}</td>
+                  <td>{new Date(c.expiresAt).toLocaleDateString()}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── APP SHELL ─────────────────────────────────────────────────────
 export default function App() {
   const [theme, toggleTheme] = useTheme();
@@ -2427,10 +3713,6 @@ export default function App() {
     "admin-compliance": { title: "Compliance Audit Monitor", subtitle: "Audit KFS generation & FLDG cap limits across all lenders" },
     "onboard-lender": { title: "Onboard Lending Partner", subtitle: "Configure Bank / NBFC underwriting criteria & SLAs" },
     lenders: { title: "Lender Catalogue", subtitle: "Onboarded regulated Banks & NBFCs" },
-    "aa-consents": { title: "AA Consents", subtitle: "Account Aggregator consent framework & data fetch rules" },
-    "cibil-pulls": { title: "CIBIL Pulls", subtitle: "Bureau data access policy & borrower credit scores" },
-    "ocen": { title: "OCEN 4.0", subtitle: "Open Credit Enablement Network protocol & integrations" },
-    "enach": { title: "eNACH AutoPay", subtitle: "Repayment mandate framework & NACH lifecycle" },
   };
 
   const roleBadge = role === "ADMIN" ? "badge-green" : role === "LENDER" ? "badge-blue" : role === "USER" ? "badge-green" : "badge-amber";
@@ -2481,7 +3763,7 @@ export default function App() {
               { icon: "⚡", label: "OCEN 4.0", id: "ocen" },
               { icon: "💳", label: "eNACH AutoPay", id: "enach" },
             ].map((item) => (
-              <button key={item.label} className="nav-item" onClick={() => {}}>
+              <button key={item.id} className={`nav-item ${page === item.id ? "active" : ""}`} onClick={() => { setPage(item.id); setMobileNavOpen(false); }}>
                 <span className="nav-icon">{item.icon}</span>
                 {item.label}
               </button>

@@ -23,6 +23,9 @@ const complianceLogSchema = new mongoose.Schema({
       "LENDER_REJECTED",
       "KFS_BEFORE_DISBURSAL",
       "DISBURSAL_RECORDED",
+      "LOAN_DRAWDOWN_ACTIVATED",
+      "LOAN_REPAYMENT_RECORDED",
+      "LOAN_FORECLOSED",
       // Legacy compatibility
       "FLDG_CAP",
       "AA_CONSENT",

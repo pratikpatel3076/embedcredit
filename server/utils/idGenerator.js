@@ -37,6 +37,36 @@ async function nextConsentId() {
   return `CNS-${String(count + 1).padStart(3, "0")}`;
 }
 
+async function nextCreditAccountId() {
+  const CreditAccount = require("../models/CreditAccount");
+  const count = await CreditAccount.countDocuments();
+  return `CRD-ACC-${String(count + 1).padStart(3, "0")}`;
+}
+
+async function nextCreditEventId() {
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `CRD-EVT-${timestamp}-${random}`;
+}
+
+async function nextCreditRuleId() {
+  const CreditRule = require("../models/CreditRule");
+  const count = await CreditRule.countDocuments();
+  return `RULE-${String(count + 1).padStart(3, "0")}`;
+}
+
+async function nextScheduleId() {
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `SCH-${timestamp}-${random}`;
+}
+
+async function nextRepaymentId() {
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `REP-${timestamp}-${random}`;
+}
+
 module.exports = {
   nextApplicationId,
   nextLenderId,
@@ -44,4 +74,9 @@ module.exports = {
   nextIntentId,
   nextOfferId,
   nextConsentId,
+  nextCreditAccountId,
+  nextCreditEventId,
+  nextCreditRuleId,
+  nextScheduleId,
+  nextRepaymentId,
 };

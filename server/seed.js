@@ -408,6 +408,163 @@ async function seedUsers() {
   console.log("[seed] seeded default platform role users");
 }
 
+const CreditAccount = require("./models/CreditAccount");
+const CreditConsumptionEvent = require("./models/CreditConsumptionEvent");
+const CreditRule = require("./models/CreditRule");
+
+async function seedCreditData() {
+  const userIdKey = "USR-001";
+  const existingAcc = await CreditAccount.findOne({ userId: userIdKey });
+  if (!existingAcc) {
+    const acc = await CreditAccount.create({
+      id: "CRD-ACC-001",
+      userId: userIdKey,
+      lenderId: "L001",
+      lenderProductId: "L001",
+      creditLimit: 100000,
+      availableCredit: 75000,
+      utilizedCredit: 20000,
+      reservedCredit: 5000,
+      currency: "INR",
+      status: "ACTIVE",
+      version: 1,
+      openedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+      lastActivityAt: new Date(),
+    });
+
+    // Seed historical immutable events
+    await CreditConsumptionEvent.insertMany([
+      {
+        id: "CRD-EVT-001",
+        eventId: "CRD-EVT-001",
+        idempotencyKey: "seed-grant-001",
+        creditAccountId: acc.id,
+        userId: userIdKey,
+        eventType: "CREDIT_GRANTED",
+        creditAmount: 100000,
+        balanceAfter: { creditLimit: 100000, availableCredit: 100000, utilizedCredit: 0, reservedCredit: 0 },
+        source: "LENDER_SYNC",
+        metadata: { facilityName: "CreditSaison Prime Line", note: "Approved credit facility" },
+        status: "SUCCESS",
+        processedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+      },
+      {
+        id: "CRD-EVT-002",
+        eventId: "CRD-EVT-002",
+        idempotencyKey: "seed-consume-002",
+        creditAccountId: acc.id,
+        userId: userIdKey,
+        eventType: "CREDIT_CONSUMED",
+        creditAmount: 25000,
+        balanceAfter: { creditLimit: 100000, availableCredit: 75000, utilizedCredit: 25000, reservedCredit: 0 },
+        source: "CONSUMER_PORTAL",
+        metadata: { purpose: "electronics", merchant: "Croma Retail", item: "Smart LED TV" },
+        status: "SUCCESS",
+        processedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
+      },
+      {
+        id: "CRD-EVT-003",
+        eventId: "CRD-EVT-003",
+        idempotencyKey: "seed-repay-003",
+        creditAccountId: acc.id,
+        userId: userIdKey,
+        eventType: "CREDIT_REPAID",
+        creditAmount: 5000,
+        balanceAfter: { creditLimit: 100000, availableCredit: 80000, utilizedCredit: 20000, reservedCredit: 0 },
+        source: "SYSTEM",
+        metadata: { paymentReference: "UPI/20240115/09876", method: "eNACH" },
+        status: "SUCCESS",
+        processedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      },
+      {
+        id: "CRD-EVT-004",
+        eventId: "CRD-EVT-004",
+        idempotencyKey: "seed-reserve-004",
+        creditAccountId: acc.id,
+        userId: userIdKey,
+        eventType: "CREDIT_RESERVED",
+        creditAmount: 5000,
+        balanceAfter: { creditLimit: 100000, availableCredit: 75000, utilizedCredit: 20000, reservedCredit: 5000 },
+        source: "CHECKOUT_GATEWAY",
+        metadata: { purpose: "travel", merchant: "MakeMyTrip", holdDurationHours: 24 },
+        status: "SUCCESS",
+        processedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+        createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+      },
+    ]);
+  }
+
+  // Seed default CreditRule if not existing
+  const existingRule = await CreditRule.findOne({ ruleId: "RULE-001" });
+  if (!existingRule) {
+    await CreditRule.create({
+      ruleId: "RULE-001",
+      ruleType: "MAX_SINGLE_TRANSACTION",
+      threshold: { maxAmount: 50000 },
+      action: "ALLOW",
+      active: true,
+      description: "Default maximum per-transaction consumption limit of ₹50,000.",
+    });
+  }
+
+  // Seed demo active loan and repayment schedule if not existing
+  const RepaymentSchedule = require("./models/RepaymentSchedule");
+  const loanId = "APP-CRD-001";
+  const existingLoan = await LoanApplication.findOne({ $or: [{ id: loanId }, { creditAccountId: "CRD-ACC-001" }] });
+  if (!existingLoan) {
+    await LoanApplication.create({
+      id: loanId,
+      borrowerName: "Demo Consumer",
+      pan: "ABCPS1234D",
+      mobile: "9876543210",
+      amount: 20000,
+      purpose: "electronics",
+      tenure: 6,
+      cibilScore: 750,
+      monthlyIncome: 60000,
+      monthlyObligations: 12000,
+      dlaId: "DLA-CONSUMER",
+      userId: userIdKey,
+      creditAccountId: "CRD-ACC-001",
+      lenderId: "L001",
+      lenderProductId: "L001",
+      interestRate: 14.5,
+      APR: 15.0,
+      emi: 3478,
+      processingFee: 200,
+      totalRepayment: 20868,
+      disbursedAmount: 20000,
+      outstandingPrincipal: 20000,
+      totalPaid: 0,
+      installmentsCount: 6,
+      installmentsPaid: 0,
+      nextDueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+      disbursedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
+      status: "ACTIVE",
+      routedTo: "L001",
+      routedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
+      kfsGenerated: true,
+      kfsAcceptedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
+      aaConsent: true,
+    });
+
+    const schedules = [
+      { id: "SCH-CRD-0001", loanId, creditAccountId: "CRD-ACC-001", userId: userIdKey, installmentNumber: 1, dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000), principalAmount: 3236, interestAmount: 242, totalAmount: 3478, paidAmount: 0, remainingAmount: 3478, status: "PENDING" },
+      { id: "SCH-CRD-0002", loanId, creditAccountId: "CRD-ACC-001", userId: userIdKey, installmentNumber: 2, dueDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000), principalAmount: 3275, interestAmount: 203, totalAmount: 3478, paidAmount: 0, remainingAmount: 3478, status: "PENDING" },
+      { id: "SCH-CRD-0003", loanId, creditAccountId: "CRD-ACC-001", userId: userIdKey, installmentNumber: 3, dueDate: new Date(Date.now() + 75 * 24 * 60 * 60 * 1000), principalAmount: 3315, interestAmount: 163, totalAmount: 3478, paidAmount: 0, remainingAmount: 3478, status: "PENDING" },
+      { id: "SCH-CRD-0004", loanId, creditAccountId: "CRD-ACC-001", userId: userIdKey, installmentNumber: 4, dueDate: new Date(Date.now() + 105 * 24 * 60 * 60 * 1000), principalAmount: 3355, interestAmount: 123, totalAmount: 3478, paidAmount: 0, remainingAmount: 3478, status: "PENDING" },
+      { id: "SCH-CRD-0005", loanId, creditAccountId: "CRD-ACC-001", userId: userIdKey, installmentNumber: 5, dueDate: new Date(Date.now() + 135 * 24 * 60 * 60 * 1000), principalAmount: 3396, interestAmount: 82, totalAmount: 3478, paidAmount: 0, remainingAmount: 3478, status: "PENDING" },
+      { id: "SCH-CRD-0006", loanId, creditAccountId: "CRD-ACC-001", userId: userIdKey, installmentNumber: 6, dueDate: new Date(Date.now() + 165 * 24 * 60 * 60 * 1000), principalAmount: 3423, interestAmount: 41, totalAmount: 3464, paidAmount: 0, remainingAmount: 3464, status: "PENDING" },
+    ];
+    await RepaymentSchedule.insertMany(schedules).catch(() => {});
+  }
+
+  console.log("[seed] seeded consumer credit account, active loan, repayment schedule, ledger events, and rules");
+}
+
 async function seedDatabase(force = false) {
   if (force) {
     await Promise.all([
@@ -422,6 +579,9 @@ async function seedDatabase(force = false) {
       LoanOffer.deleteMany({}),
       DLA.deleteMany({}),
       DLGPortfolio.deleteMany({}),
+      CreditAccount.deleteMany({}),
+      CreditConsumptionEvent.deleteMany({}),
+      CreditRule.deleteMany({}),
     ]);
     console.log("[seed] force reseed — cleared collections");
   }
@@ -429,6 +589,7 @@ async function seedDatabase(force = false) {
   await seedLenders();
   await seedApplicationsAndRoutes();
   await seedConsumerData();
+  await seedCreditData();
 }
 
 module.exports = { seedDatabase };

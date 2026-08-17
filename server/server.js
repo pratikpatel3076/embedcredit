@@ -16,6 +16,7 @@ const adminRoutes = require("./routes/admin.routes");
 const engineRoutes = require("./routes/engine.routes");
 const consumerRoutes = require("./routes/consumer.routes");
 const integrationRoutes = require("./routes/integration.routes");
+const creditRoutes = require("./routes/credit.routes");
 
 const app = express();
 
@@ -57,6 +58,7 @@ app.post("/api/mock-dla-webhook", (req, res) => {
 
 // Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/credit", creditRoutes);
 app.use("/api/v1/integrations", integrationRoutes);
 app.use("/api", consumerRoutes);
 app.use("/api", dlaRoutes);

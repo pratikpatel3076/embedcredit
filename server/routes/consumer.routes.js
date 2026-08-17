@@ -428,9 +428,14 @@ router.get(
   })
 );
 
-// GET /api/my-loans
+const CreditService = require("../services/credit");
+const RepaymentSchedule = require("../models/RepaymentSchedule");
+const Repayment = require("../models/Repayment");
+const { prohibitAdminMutation } = require("../middleware/creditAuthorization");
+
+// GET /api/my-loans or GET /api/loans
 router.get(
-  "/my-loans",
+  ["/my-loans", "/loans"],
   authenticate,
   asyncHandler(async (req, res) => {
     const user = await User.findById(req.user.sub);
@@ -443,7 +448,151 @@ router.get(
     const total = await LoanApplication.countDocuments(query);
     const apps = await LoanApplication.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit);
 
-    return res.json({ apps, total, page, limit });
+    // Enhance loans with progress metrics
+    const enhancedApps = await Promise.all(
+      apps.map(async (app) => {
+        const appObj = app.toObject();
+        const totalInstallments = await RepaymentSchedule.countDocuments({ loanId: app.id });
+        const paidInstallments = await RepaymentSchedule.countDocuments({ loanId: app.id, status: "PAID" });
+        const nextPending = await RepaymentSchedule.findOne({
+          loanId: app.id,
+          status: { $in: ["PENDING", "PARTIALLY_PAID", "OVERDUE"] },
+        }).sort({ installmentNumber: 1 });
+
+        return {
+          ...appObj,
+          installmentsCount: totalInstallments || app.tenure,
+          installmentsPaid: paidInstallments,
+          nextDueDate: nextPending ? nextPending.dueDate : app.nextDueDate,
+          outstandingPrincipal: app.outstandingPrincipal !== undefined ? app.outstandingPrincipal : app.amount,
+        };
+      })
+    );
+
+    return res.json({ apps: enhancedApps, total, page, limit });
+  })
+);
+
+// GET /api/loans/:id (Get complete loan detail + schedule + repayments)
+router.get(
+  "/loans/:id",
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const userIdentifier = req.user.userId || req.user.sub;
+    try {
+      const result = await CreditService.getLoanWithSchedule(req.params.id, userIdentifier);
+      return res.json(result);
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code });
+    }
+  })
+);
+
+// GET /api/loans/:id/repayment-schedule
+router.get(
+  "/loans/:id/repayment-schedule",
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const userIdentifier = req.user.userId || req.user.sub;
+    try {
+      const result = await CreditService.getLoanWithSchedule(req.params.id, userIdentifier);
+      return res.json({ schedules: result.schedules, summary: result.summary });
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code });
+    }
+  })
+);
+
+// POST /api/loans/:id/repay (Process installment or custom repayment)
+router.post(
+  "/loans/:id/repay",
+  authenticate,
+  prohibitAdminMutation,
+  requireRole("USER", "LENDER", "DLA"),
+  asyncHandler(async (req, res) => {
+    const userIdentifier = req.user.userId || req.user.sub;
+    const { installmentId, amount, paymentMethod, paymentReference, idempotencyKey } = req.body || {};
+    const headerKey = req.headers["idempotency-key"] || idempotencyKey;
+
+    try {
+      const result = await CreditService.processRepayment({
+        loanId: req.params.id,
+        installmentId,
+        amount: amount !== undefined ? Number(amount) : null,
+        userId: userIdentifier,
+        paymentMethod: paymentMethod || "UPI_AUTOPAY",
+        paymentReference,
+        idempotencyKey: headerKey,
+      });
+
+      return res.json(result);
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code });
+    }
+  })
+);
+
+// POST /api/loans/:id/repayments/:installmentId
+router.post(
+  "/loans/:id/repayments/:installmentId",
+  authenticate,
+  prohibitAdminMutation,
+  requireRole("USER", "LENDER", "DLA"),
+  asyncHandler(async (req, res) => {
+    const userIdentifier = req.user.userId || req.user.sub;
+    const { amount, paymentMethod, paymentReference, idempotencyKey } = req.body || {};
+    const headerKey = req.headers["idempotency-key"] || idempotencyKey;
+
+    try {
+      const result = await CreditService.processRepayment({
+        loanId: req.params.id,
+        installmentId: req.params.installmentId,
+        amount: amount !== undefined ? Number(amount) : null,
+        userId: userIdentifier,
+        paymentMethod: paymentMethod || "UPI_AUTOPAY",
+        paymentReference,
+        idempotencyKey: headerKey,
+      });
+
+      return res.json(result);
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code });
+    }
+  })
+);
+
+// POST /api/loans/:id/foreclose (Full settlement)
+router.post(
+  "/loans/:id/foreclose",
+  authenticate,
+  prohibitAdminMutation,
+  requireRole("USER", "LENDER"),
+  asyncHandler(async (req, res) => {
+    const userIdentifier = req.user.userId || req.user.sub;
+    const { paymentMethod, paymentReference } = req.body || {};
+
+    try {
+      const result = await CreditService.processForeclosure({
+        loanId: req.params.id,
+        userId: userIdentifier,
+        paymentMethod: paymentMethod || "UPI_AUTOPAY",
+        paymentReference,
+      });
+
+      return res.json(result);
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, code: err.code });
+    }
+  })
+);
+
+// GET /api/loans/:id/repayments (Repayment receipts)
+router.get(
+  "/loans/:id/repayments",
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const repayments = await Repayment.find({ loanId: req.params.id }).sort({ createdAt: -1 });
+    return res.json({ repayments });
   })
 );
 

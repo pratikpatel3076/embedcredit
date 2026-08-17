@@ -50,6 +50,7 @@ router.get(
 
 const { logCompliance } = require("../middleware/rbiCompliance");
 const { dispatchWebhook } = require("../services/webhookService");
+const { syncFacilityFromLoan } = require("../services/credit");
 
 // POST /api/applications/:id/approve  (LENDER ONLY — ADMIN is forbidden)
 router.post(
@@ -90,6 +91,9 @@ router.post(
       resourceId: app.id,
       payload: { applicationId: app.id, status: "APPROVED", lenderId: req.user.lenderId },
     });
+
+    // Synchronize consumption credit facility asynchronously
+    syncFacilityFromLoan(app).catch((e) => console.error("[CreditSync] error:", e.message));
 
     return res.json({ application: app, message: "Loan application approved by lender." });
   })
@@ -209,6 +213,9 @@ router.post(
       resourceId: app.id,
       payload: { applicationId: app.id, amount: app.amount, lenderId: req.user.lenderId },
     });
+
+    // Synchronize consumption credit facility asynchronously
+    syncFacilityFromLoan(app).catch((e) => console.error("[CreditSync] error:", e.message));
 
     return res.json({
       application: app,

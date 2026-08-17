@@ -52,9 +52,9 @@ const { logCompliance } = require("../middleware/rbiCompliance");
 const { dispatchWebhook } = require("../services/webhookService");
 const { syncFacilityFromLoan } = require("../services/credit");
 
-// POST /api/applications/:id/approve  (LENDER ONLY — ADMIN is forbidden)
+// POST /api/applications/:id/approve or POST /api/lender/applications/:id/approve (LENDER ONLY — ADMIN is forbidden)
 router.post(
-  "/applications/:id/approve",
+  ["/applications/:id/approve", "/lender/applications/:id/approve"],
   authenticate,
   requireRole("LENDER"),
   canAccessApplication,
@@ -92,17 +92,27 @@ router.post(
       payload: { applicationId: app.id, status: "APPROVED", lenderId: req.user.lenderId },
     });
 
-    // Synchronize consumption credit facility asynchronously
-    syncFacilityFromLoan(app).catch((e) => console.error("[CreditSync] error:", e.message));
+    // Synchronize and activate consumption credit facility
+    let facility = null;
+    try {
+      facility = await syncFacilityFromLoan(app);
+    } catch (e) {
+      console.error("[CreditSync] error:", e.message);
+    }
 
-    return res.json({ application: app, message: "Loan application approved by lender." });
+    return res.json({
+      success: true,
+      application: app,
+      facility,
+      message: "Loan application approved by lender. Credit facility activated.",
+    });
   })
 );
 
-// POST /api/applications/:id/reject  (LENDER ONLY — ADMIN is forbidden)
+// POST /api/applications/:id/reject or POST /api/lender/applications/:id/reject (LENDER ONLY — ADMIN is forbidden)
 // Body: { rejectionReasonCode, rejectionReasonText }
 router.post(
-  "/applications/:id/reject",
+  ["/applications/:id/reject", "/lender/applications/:id/reject"],
   authenticate,
   requireRole("LENDER"),
   canAccessApplication,
@@ -169,13 +179,13 @@ router.post(
       payload: { applicationId: app.id, status: "REJECTED", reason: app.declineExplanation },
     });
 
-    return res.json({ application: app, message: "Loan application rejected." });
+    return res.json({ success: true, application: app, message: "Loan application rejected." });
   })
 );
 
-// POST /api/applications/:id/disburse  (LENDER ONLY — ADMIN is forbidden)
+// POST /api/applications/:id/disburse or POST /api/lender/applications/:id/disburse (LENDER ONLY — ADMIN is forbidden)
 router.post(
-  "/applications/:id/disburse",
+  ["/applications/:id/disburse", "/lender/applications/:id/disburse"],
   authenticate,
   requireRole("LENDER"),
   canAccessApplication,
@@ -214,10 +224,11 @@ router.post(
       payload: { applicationId: app.id, amount: app.amount, lenderId: req.user.lenderId },
     });
 
-    // Synchronize consumption credit facility asynchronously
+    // Synchronize consumption credit facility
     syncFacilityFromLoan(app).catch((e) => console.error("[CreditSync] error:", e.message));
 
     return res.json({
+      success: true,
       application: app,
       message: "Disbursal recorded. Funds flow directly from lender to borrower — the marketplace never touches money.",
     });

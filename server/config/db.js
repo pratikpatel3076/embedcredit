@@ -20,7 +20,7 @@ async function seedUsers() {
       username: process.env.SEED_LENDER_USERNAME || "lender1",
       password: process.env.SEED_LENDER_PASSWORD || "Lender@123",
       role: "LENDER",
-      lenderId: process.env.SEED_LENDER_LENDER_ID || "L003",
+      lenderId: process.env.SEED_LENDER_LENDER_ID || "L001",
     },
     {
       username: process.env.SEED_USER_USERNAME || "user1",

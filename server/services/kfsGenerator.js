@@ -9,6 +9,8 @@ function generateKFS(app, lender) {
   const processingFeeAmt = Math.round((app.amount * lender.processingFee) / 100);
 
   return {
+    proposalNumber: `KFS-${app.id || Date.now()}`,
+    kfsId: `KFS-${app.id || Date.now()}`,
     lenderName: lender.lenderName,
     lenderType: lender.type,
     borrowerName: app.borrowerName,

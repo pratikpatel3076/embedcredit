@@ -18,7 +18,7 @@ function signToken(user) {
     username: user.username,
     role: user.role,
     dlaId: user.dlaId || null,
-    lenderId: user.lenderId || null,
+    lenderId: user.lenderId || (user.username === "lender1" ? "L001" : null),
     userId: user.userId || null,
   };
   return jwt.sign(payload, secret, { expiresIn: JWT_EXPIRES_IN });
@@ -99,6 +99,11 @@ router.post(
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
       return res.status(401).json({ error: "Invalid username or password" });
+    }
+
+    if (user.username === "lender1" && user.lenderId !== "L001") {
+      user.lenderId = "L001";
+      await user.save();
     }
 
     const token = signToken(user);

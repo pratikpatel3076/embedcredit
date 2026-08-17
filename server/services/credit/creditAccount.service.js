@@ -210,7 +210,12 @@ async function syncFacilityFromLoan(loanApp, lenderProduct = null) {
     });
 
     if (existing) {
-      // Account already exists
+      if (existing.status !== "ACTIVE") {
+        existing.status = "ACTIVE";
+        existing.lastActivityAt = new Date();
+        await existing.save();
+        creditCache.invalidate(existing.id);
+      }
       return existing;
     }
 

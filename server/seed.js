@@ -20,55 +20,70 @@ const LENDERS = [
     id: "L001",
     lenderName: "CreditSaison India",
     type: "NBFC",
-    minAmount: 10000,
+    minAmount: 5000,
     maxAmount: 500000,
     interestRate: 14.5,
     APR: 15.0,
-    tenureMonths: [3, 6, 12, 18],
+    tenureMonths: [3, 6, 12, 18, 24, 36],
     minCibilScore: 650,
-    maxDti: 0.45,
+    maxDti: 0.55,
     processingFee: 1.5,
     disbursalTime: "T+1",
-    supportedPurposes: ["personal", "consumer", "education", "electronics", "shopping"],
+    supportedPurposes: [
+      "electronics",
+      "shopping",
+      "travel",
+      "healthcare",
+      "medical",
+      "education",
+      "home_improvement",
+      "personal",
+      "consumer",
+      "emergency",
+      "other",
+    ],
     ocenEnabled: true,
     aaEnabled: true,
     nachEnabled: true,
+    active: true,
   },
   {
     id: "L002",
     lenderName: "Ugro Capital",
     type: "NBFC",
-    minAmount: 50000,
+    minAmount: 25000,
     maxAmount: 2000000,
     interestRate: 16.0,
     APR: 16.5,
-    tenureMonths: [6, 12, 24, 36],
+    tenureMonths: [6, 12, 18, 24, 36],
     minCibilScore: 680,
-    maxDti: 0.5,
+    maxDti: 0.50,
     processingFee: 2.0,
     disbursalTime: "T+2",
-    supportedPurposes: ["sme", "business", "working_capital"],
+    supportedPurposes: ["sme", "business", "working_capital", "personal", "consumer", "education", "home_improvement"],
     ocenEnabled: false,
     aaEnabled: true,
     nachEnabled: true,
+    active: true,
   },
   {
     id: "L003",
     lenderName: "HDFC Bank",
     type: "Bank",
-    minAmount: 25000,
+    minAmount: 10000,
     maxAmount: 1500000,
     interestRate: 10.75,
     APR: 11.25,
-    tenureMonths: [12, 24, 36, 48, 60],
-    minCibilScore: 720,
-    maxDti: 0.4,
+    tenureMonths: [3, 6, 12, 18, 24, 36, 48, 60],
+    minCibilScore: 700,
+    maxDti: 0.45,
     processingFee: 1.0,
     disbursalTime: "T+3",
-    supportedPurposes: ["personal", "consumer", "medical", "electronics", "travel"],
+    supportedPurposes: ["personal", "consumer", "medical", "healthcare", "electronics", "travel", "education", "home_improvement", "shopping"],
     ocenEnabled: true,
     aaEnabled: true,
     nachEnabled: true,
+    active: true,
   },
   {
     id: "L004",
@@ -78,15 +93,16 @@ const LENDERS = [
     maxAmount: 200000,
     interestRate: 18.0,
     APR: 18.5,
-    tenureMonths: [3, 6, 9, 12],
+    tenureMonths: [3, 6, 9, 12, 18, 24],
     minCibilScore: 620,
     maxDti: 0.55,
     processingFee: 2.5,
     disbursalTime: "T+0",
-    supportedPurposes: ["personal", "consumer", "emergency", "shopping"],
+    supportedPurposes: ["personal", "consumer", "emergency", "shopping", "electronics", "travel", "healthcare", "education", "home_improvement", "other"],
     ocenEnabled: false,
     aaEnabled: false,
     nachEnabled: true,
+    active: true,
   },
 ];
 
@@ -151,12 +167,14 @@ const APPLICATIONS = [
 ];
 
 async function seedLenders() {
-  if (await LenderProduct.countDocuments()) {
-    console.log("[seed] lenders exist — skipping");
-    return;
+  for (const l of LENDERS) {
+    await LenderProduct.findOneAndUpdate(
+      { id: l.id },
+      { $set: l },
+      { upsert: true, new: true }
+    );
   }
-  await LenderProduct.insertMany(LENDERS);
-  console.log(`[seed] inserted ${LENDERS.length} lender products`);
+  console.log(`[seed] synchronized ${LENDERS.length} lender products`);
 }
 
 async function seedApplicationsAndRoutes() {

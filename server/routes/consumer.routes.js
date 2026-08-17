@@ -266,7 +266,27 @@ router.post(
     const { purpose, requestedAmount, preferredTenure } = req.body || {};
 
     if (!purpose || !requestedAmount || !preferredTenure) {
-      return res.status(400).json({ error: "purpose, requestedAmount, and preferredTenure are required" });
+      return res.status(400).json({
+        success: false,
+        error: { code: "INVALID_PARAMS", message: "purpose, requestedAmount, and preferredTenure are required" },
+      });
+    }
+
+    const numAmount = Number(requestedAmount);
+    const numTenure = Number(preferredTenure);
+
+    if (isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: { code: "INVALID_AMOUNT", message: "requestedAmount must be a positive number" },
+      });
+    }
+
+    if (isNaN(numTenure) || numTenure <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: { code: "INVALID_TENURE", message: "preferredTenure must be a positive number" },
+      });
     }
 
     const intentId = await nextIntentId();
@@ -276,14 +296,28 @@ router.post(
     const intent = await LoanIntent.create({
       id: intentId,
       userId: userIdKey,
-      purpose,
-      requestedAmount: Number(requestedAmount),
-      preferredTenure: Number(preferredTenure),
+      purpose: String(purpose).trim(),
+      requestedAmount: numAmount,
+      preferredTenure: numTenure,
       status: "ACTIVE",
       expiresAt: expDate,
     });
 
-    return res.status(201).json({ intent, message: "Credit intent registered successfully" });
+    return res.status(201).json({
+      success: true,
+      id: intent.id,
+      intent,
+      loanIntent: {
+        id: intent.id,
+        purpose: intent.purpose,
+        amount: intent.requestedAmount,
+        requestedAmount: intent.requestedAmount,
+        tenure: intent.preferredTenure,
+        preferredTenure: intent.preferredTenure,
+        status: intent.status,
+      },
+      message: "Credit intent registered successfully",
+    });
   })
 );
 
@@ -305,14 +339,31 @@ router.post(
   authenticate,
   requireRole("USER"),
   asyncHandler(async (req, res) => {
-    const intent = await LoanIntent.findOne({ id: req.params.id });
-    if (!intent) return res.status(404).json({ error: "Loan intent not found" });
+    const rawId = req.params.id;
+    if (!rawId || rawId === "undefined" || rawId === "null" || !String(rawId).trim()) {
+      return res.status(400).json({
+        success: false,
+        error: { code: "INVALID_INTENT_ID", message: "A valid loanIntentId parameter is required" },
+      });
+    }
+
+    const intent = await LoanIntent.findOne({ id: rawId.trim() });
+    if (!intent) {
+      return res.status(404).json({
+        success: false,
+        error: { code: "LOAN_INTENT_NOT_FOUND", message: "Loan intent not found" },
+      });
+    }
 
     const user = await User.findById(req.user.sub);
     const userIdKey = user?.userId || req.user.sub;
     let creditProfile = await CreditProfile.findOne({ userId: userIdKey });
     if (!creditProfile) {
-      creditProfile = { cibilScore: 750, monthlyIncome: user?.monthlyIncome || 60000, monthlyObligations: user?.monthlyObligations || 12000 };
+      creditProfile = {
+        cibilScore: 750,
+        monthlyIncome: user?.monthlyIncome || 75000,
+        monthlyObligations: user?.monthlyObligations || 15000,
+      };
     }
 
     const lenders = (await LenderProduct.find({ active: true })).map((l) => l.toObject());
@@ -360,6 +411,7 @@ router.post(
     });
 
     return res.json({
+      success: true,
       intent,
       offers: offerRecords,
       ineligibleLenders: matchResults.ineligibleProducts,
@@ -372,7 +424,15 @@ router.get(
   "/loan-intents/:id/offers",
   authenticate,
   asyncHandler(async (req, res) => {
-    const offers = await LoanOffer.find({ loanIntentId: req.params.id }).sort({ interestRate: 1 });
+    const rawId = req.params.id;
+    if (!rawId || rawId === "undefined" || rawId === "null" || !String(rawId).trim()) {
+      return res.status(400).json({
+        success: false,
+        error: { code: "INVALID_INTENT_ID", message: "A valid loanIntentId parameter is required" },
+      });
+    }
+
+    const offers = await LoanOffer.find({ loanIntentId: rawId.trim() }).sort({ interestRate: 1 });
     return res.json(offers);
   })
 );
@@ -383,20 +443,49 @@ router.post(
   authenticate,
   requireRole("USER"),
   asyncHandler(async (req, res) => {
-    const offer = await LoanOffer.findOne({ id: req.params.id });
-    if (!offer) return res.status(404).json({ error: "Offer not found" });
+    const rawId = req.params.id;
+    if (!rawId || rawId === "undefined" || rawId === "null" || !String(rawId).trim()) {
+      return res.status(400).json({
+        success: false,
+        error: { code: "INVALID_OFFER_ID", message: "A valid offerId parameter is required" },
+      });
+    }
+
+    const offer = await LoanOffer.findOne({ id: rawId.trim() });
+    if (!offer) {
+      return res.status(404).json({
+        success: false,
+        error: { code: "OFFER_NOT_FOUND", message: "Offer not found" },
+      });
+    }
+
+    if (offer.status === "SELECTED" && offer.applicationId) {
+      return res.status(409).json({
+        success: false,
+        error: { code: "OFFER_ALREADY_SELECTED", message: "This offer has already been selected and routed to lender" },
+      });
+    }
 
     const intent = await LoanIntent.findOne({ id: offer.loanIntentId });
     const user = await User.findById(req.user.sub);
     const userIdKey = user?.userId || req.user.sub;
+    const creditProfile = await CreditProfile.findOne({ userId: userIdKey });
     const lender = await LenderProduct.findOne({ id: offer.lenderProductId });
 
-    if (!lender) return res.status(404).json({ error: "Lender product unavailable" });
+    if (!lender) {
+      return res.status(404).json({
+        success: false,
+        error: { code: "LENDER_UNAVAILABLE", message: "Lender product unavailable" },
+      });
+    }
 
     const appId = await nextApplicationId();
     const pan = user?.pan || "ABCPS1234D";
     const name = user?.fullName || user?.username || "Consumer User";
     const mobile = user?.mobile || "9876543210";
+    const cibilScore = creditProfile?.cibilScore || 750;
+    const monthlyIncome = creditProfile?.monthlyIncome || user?.monthlyIncome || 75000;
+    const monthlyObligations = creditProfile?.monthlyObligations || user?.monthlyObligations || 15000;
 
     const appObj = {
       id: appId,
@@ -404,11 +493,11 @@ router.post(
       pan,
       mobile,
       amount: offer.amount,
-      purpose: intent ? intent.purpose.toLowerCase().replace(/\s+/g, "_") : "personal",
+      purpose: intent ? intent.purpose.toLowerCase().replace(/[\s_-]+/g, "_") : "personal",
       tenure: offer.tenure,
-      cibilScore: 750,
-      monthlyIncome: user?.monthlyIncome || 60000,
-      monthlyObligations: user?.monthlyObligations || 12000,
+      cibilScore,
+      monthlyIncome,
+      monthlyObligations,
       dlaId: "DLA-CONSUMER",
       userId: userIdKey,
       loanIntentId: intent ? intent.id : null,
@@ -450,7 +539,7 @@ router.post(
       type: "OFFER_SELECTED",
       applicationId: loanApp.id,
       userId: userIdKey,
-      actor: user.username,
+      actor: user?.username || "user",
       actorRole: "USER",
       pass: true,
       details: { offerId: offer.id, lenderId: lender.id },
@@ -467,6 +556,7 @@ router.post(
     });
 
     return res.status(201).json({
+      success: true,
       application: loanApp,
       kfsData,
       route,

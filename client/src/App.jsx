@@ -5782,7 +5782,7 @@ function ConsumerDashboardPage({ user, onNavigate }) {
             </div>
           </div>
           <div className="flex gap-2">
-            <button className="btn btn-sm btn-secondary" onClick={() => onNavigate("credit-facility")}>
+            <button className="btn btn-sm btn-secondary" onClick={() => onNavigate("my-credit")}>
               View Facility Details →
             </button>
             <button className="btn btn-sm btn-primary" onClick={() => handleOpenDrawdown("Shopping")}>
@@ -7133,8 +7133,8 @@ function ConsumerProfilePage({ user, onRefresh }) {
 
 function GetCreditPage({ initialPurpose = "Electronics", onOffersFound }) {
   const [purpose, setPurpose] = useState(initialPurpose);
-  const [requestedAmount, setRequestedAmount] = useState(80000);
-  const [preferredTenure, setPreferredTenure] = useState(12);
+  const [requestedAmount, setRequestedAmount] = useState(25000);
+  const [preferredTenure, setPreferredTenure] = useState(6);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -7148,14 +7148,26 @@ function GetCreditPage({ initialPurpose = "Electronics", onOffersFound }) {
     setBusy(true);
     setErr(null);
     try {
-      const intent = await api("/loan-intents", {
+      const intentRes = await api("/loan-intents", {
         method: "POST",
-        body: JSON.stringify({ purpose, requestedAmount: Number(requestedAmount), preferredTenure: Number(preferredTenure) }),
+        body: JSON.stringify({
+          purpose,
+          requestedAmount: Number(requestedAmount),
+          preferredTenure: Number(preferredTenure),
+        }),
       });
-      const res = await api(`/loan-intents/${intent.id}/find-offers`, { method: "POST" });
-      if (onOffersFound) onOffersFound(intent.id, res.offers);
+
+      const createdIntentId = intentRes?.id || intentRes?.loanIntent?.id || intentRes?.intent?.id;
+
+      if (!createdIntentId || createdIntentId === "undefined" || createdIntentId === "null" || !String(createdIntentId).trim()) {
+        throw new Error("Unable to create the credit request. Please try again.");
+      }
+
+      const res = await api(`/loan-intents/${createdIntentId}/find-offers`, { method: "POST" });
+      const foundOffers = res?.offers || (Array.isArray(res) ? res : []);
+      if (onOffersFound) onOffersFound(createdIntentId, foundOffers);
     } catch (ex) {
-      setErr(ex.message);
+      setErr(ex.message || "Failed to find offers. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -7170,10 +7182,10 @@ function GetCreditPage({ initialPurpose = "Electronics", onOffersFound }) {
             Define your loan purpose, amount, and tenure to receive pre-approved lender offers
           </div>
         </div>
-        <span className="badge badge-green">Marketplace Engine</span>
+        <span className="badge badge-green">Marketplace Matching Engine</span>
       </div>
 
-      {err && <div className="form-error mb-4">{err}</div>}
+      {err && <div className="form-error mb-4" style={{ padding: "10px 14px", background: "var(--red-soft)", border: "1px solid var(--red-border)", color: "var(--red)", borderRadius: "var(--radius-md)" }}>{err}</div>}
 
       <form onSubmit={handleCreateIntent}>
         <div className="form-group mb-4">
@@ -7199,7 +7211,7 @@ function GetCreditPage({ initialPurpose = "Electronics", onOffersFound }) {
           </div>
           <input
             type="range"
-            min={10000}
+            min={5000}
             max={500000}
             step={5000}
             value={requestedAmount}
@@ -7243,22 +7255,42 @@ function GetCreditPage({ initialPurpose = "Electronics", onOffersFound }) {
 
 function OffersComparisonPage({ intentId, onOfferSelected }) {
   const [offers, setOffers] = useState([]);
+  const [intent, setIntent] = useState(null);
+  const [creditProfile, setCreditProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedKfs, setSelectedKfs] = useState(null);
+  const [selectedApp, setSelectedApp] = useState(null);
+  const [selectingId, setSelectingId] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
 
   const fetchOffers = async () => {
     setLoading(true);
+    setErrorMsg(null);
     try {
       let targetId = intentId;
       if (!targetId) {
         const intents = await api("/loan-intents").catch(() => []);
         const safeIntents = Array.isArray(intents) ? intents : (intents?.intents || []);
-        if (safeIntents.length > 0) targetId = safeIntents[0].id;
+        if (safeIntents.length > 0) {
+          targetId = safeIntents[0].id;
+          setIntent(safeIntents[0]);
+        }
+      } else {
+        const intents = await api("/loan-intents").catch(() => []);
+        const safeIntents = Array.isArray(intents) ? intents : (intents?.intents || []);
+        const found = safeIntents.find((i) => i.id === targetId);
+        if (found) setIntent(found);
       }
-      if (targetId) {
+
+      const cp = await api("/credit-profile").catch(() => null);
+      if (cp) setCreditProfile(cp);
+
+      if (targetId && targetId !== "undefined" && targetId !== "null") {
         const data = await api(`/loan-intents/${targetId}/offers`).catch(() => []);
         setOffers(Array.isArray(data) ? data : (data?.offers || []));
       }
+    } catch (e) {
+      setErrorMsg(e.message);
     } finally {
       setLoading(false);
     }
@@ -7269,12 +7301,20 @@ function OffersComparisonPage({ intentId, onOfferSelected }) {
   }, [intentId]);
 
   const selectOffer = async (offerId) => {
+    setSelectingId(offerId);
+    setErrorMsg(null);
     try {
       const res = await api(`/offers/${offerId}/select`, { method: "POST" });
       setSelectedKfs(res.kfsData);
+      setSelectedApp(res.application);
+      setOffers((prev) =>
+        prev.map((o) => (o.id === offerId ? { ...o, status: "SELECTED" } : o))
+      );
       if (onOfferSelected) onOfferSelected(res);
     } catch (ex) {
-      alert("Failed to select offer: " + ex.message);
+      setErrorMsg("Failed to select offer: " + ex.message);
+    } finally {
+      setSelectingId(null);
     }
   };
 
@@ -7285,12 +7325,66 @@ function OffersComparisonPage({ intentId, onOfferSelected }) {
           <div>
             <div className="section-title">Eligible Credit Offers Comparison</div>
             <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
-              Compare interest rates, APR, processing fees, and repayment terms transparently
+              Based on your CIBIL Bureau Score, requested amount, tenure, and consumption purpose
             </div>
           </div>
-          <span className="badge badge-green">No Hidden Fees</span>
+          <span className="badge badge-green">Transparent Pricing · RBI Compliant</span>
+        </div>
+
+        {/* Intent & Borrower Parameters Snapshot */}
+        <div style={{ background: "var(--bg-surface-elevated)", padding: "12px 16px", borderRadius: "var(--radius-md)", marginTop: 12 }}>
+          <div className="grid-4 text-sm gap-3">
+            <div>
+              <span style={{ color: "var(--text-muted)", fontSize: 11 }}>CIBIL Bureau Score</span>
+              <div style={{ fontWeight: 700, fontSize: 15, color: "var(--green)" }}>
+                {creditProfile?.cibilScore || 750}
+              </div>
+            </div>
+            <div>
+              <span style={{ color: "var(--text-muted)", fontSize: 11 }}>Requested Amount</span>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>
+                ₹{Number(intent?.requestedAmount || 25000).toLocaleString("en-IN")}
+              </div>
+            </div>
+            <div>
+              <span style={{ color: "var(--text-muted)", fontSize: 11 }}>Tenure</span>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>
+                {intent?.preferredTenure || 6} Months
+              </div>
+            </div>
+            <div>
+              <span style={{ color: "var(--text-muted)", fontSize: 11 }}>Consumption Purpose</span>
+              <div style={{ fontWeight: 700, fontSize: 15, textTransform: "capitalize" }}>
+                {intent?.purpose || "Electronics"}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
+
+      {errorMsg && (
+        <div className="error-banner mb-4">
+          <span>{errorMsg}</span>
+          <button className="close-btn" onClick={() => setErrorMsg(null)}>✕</button>
+        </div>
+      )}
+
+      {selectedApp && (
+        <div className="card mb-4" style={{ border: "2px solid var(--green)", background: "rgba(16, 185, 129, 0.08)" }}>
+          <div className="flex justify-between items-center mb-2">
+            <div style={{ fontWeight: 700, fontSize: 16, color: "var(--green)" }}>
+              ✓ Offer Selected & Routed to Lender (Status: ROUTED)
+            </div>
+            <span className="badge badge-green">Awaiting Lender Underwriting Decision</span>
+          </div>
+          <div style={{ fontSize: 13, color: "var(--text-primary)", marginBottom: 8 }}>
+            Application <strong>{selectedApp.id}</strong> has been routed to <strong>{selectedApp.routedTo}</strong>.
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+            👉 <strong>Next Step:</strong> Log in as <strong>lender1</strong> (Password: <code>Lender@123</code>) in the Lender Portal to review borrower metrics and approve the loan. Once approved, the credit facility becomes active and ready for instant drawdown.
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="card empty">
@@ -7299,64 +7393,92 @@ function OffersComparisonPage({ intentId, onOfferSelected }) {
         </div>
       ) : offers.length === 0 ? (
         <div className="card empty">
-          <div className="empty-text">No offers generated for this intent yet. Create a credit need first.</div>
+          <div className="empty-icon">🏷️</div>
+          <div className="empty-text">No eligible offers generated for this intent yet.</div>
+          <div className="empty-sub">Create a new consumption credit request from the Get Credit tab.</div>
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
-          {offers.map((off) => (
-            <div key={off.id} className="card" style={{ border: "1px solid var(--border-color)", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-              <div>
-                <div className="flex justify-between items-center mb-3">
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{off.lenderName}</div>
-                  <span className="badge badge-blue">{off.disbursalTime}</span>
-                </div>
-
-                <div style={{ fontSize: 26, fontWeight: 800, color: "var(--primary-text)", marginBottom: 12 }}>
-                  ₹{off.amount?.toLocaleString("en-IN")}
-                </div>
-
-                <div style={{ background: "var(--bg-surface-elevated)", padding: 12, borderRadius: "var(--radius-md)", marginBottom: 14 }}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span style={{ color: "var(--text-muted)" }}>Interest Rate:</span>
-                    <strong>{off.interestRate}% p.a.</strong>
-                  </div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span style={{ color: "var(--text-muted)" }}>APR (Annualized):</span>
-                    <strong>{off.APR}%</strong>
-                  </div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span style={{ color: "var(--text-muted)" }}>Monthly EMI:</span>
-                    <strong style={{ color: "var(--green)" }}>₹{off.EMI?.toLocaleString("en-IN")}</strong>
-                  </div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span style={{ color: "var(--text-muted)" }}>Processing Fee:</span>
-                    <span>₹{off.processingFee?.toLocaleString("en-IN")}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span style={{ color: "var(--text-muted)" }}>Total Repayment:</span>
-                    <span>₹{off.totalRepayment?.toLocaleString("en-IN")}</span>
-                  </div>
-                </div>
-
-                {off.eligibilityReasons && off.eligibilityReasons.length > 0 && (
-                  <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 14 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 4 }}>Why you qualify:</div>
-                    {off.eligibilityReasons.map((r, i) => (
-                      <div key={i}>✓ {r}</div>
-                    ))}
+          {offers.map((off) => {
+            const isLender1 = off.lenderId === "L001" || off.lenderProductId === "L001" || (off.lenderName && off.lenderName.toLowerCase().includes("creditsaison"));
+            return (
+              <div
+                key={off.id}
+                className="card"
+                style={{
+                  border: isLender1 ? "2px solid var(--primary)" : "1px solid var(--border-color)",
+                  background: isLender1 ? "linear-gradient(180deg, rgba(37,99,235,0.06) 0%, var(--bg-surface) 100%)" : "var(--bg-surface)",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  position: "relative",
+                }}
+              >
+                {isLender1 && (
+                  <div style={{ position: "absolute", top: -10, right: 14, background: "var(--primary)", color: "#fff", fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    Primary Lender · Demo Choice
                   </div>
                 )}
-              </div>
+                <div>
+                  <div className="flex justify-between items-center mb-3">
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 17, color: "var(--primary-text)" }}>{off.lenderName}</div>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Consumer Credit Facility</div>
+                    </div>
+                    <span className="badge badge-blue">{off.disbursalTime}</span>
+                  </div>
 
-              <button
-                className="btn btn-primary w-full"
-                onClick={() => selectOffer(off.id)}
-                disabled={off.status === "SELECTED"}
-              >
-                {off.status === "SELECTED" ? "✓ Offer Selected" : "Select Offer & Generate KFS"}
-              </button>
-            </div>
-          ))}
+                  <div style={{ fontSize: 28, fontWeight: 800, color: "var(--primary-text)", marginBottom: 12 }}>
+                    ₹{off.amount?.toLocaleString("en-IN")}
+                    <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text-muted)", marginLeft: 6 }}>
+                      / {off.tenure} Months
+                    </span>
+                  </div>
+
+                  <div style={{ background: "var(--bg-surface-elevated)", padding: 12, borderRadius: "var(--radius-md)", marginBottom: 14 }}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span style={{ color: "var(--text-muted)" }}>Interest Rate:</span>
+                      <strong>{off.interestRate}% p.a.</strong>
+                    </div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span style={{ color: "var(--text-muted)" }}>APR (Annualized):</span>
+                      <strong>{off.APR}%</strong>
+                    </div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span style={{ color: "var(--text-muted)" }}>Estimated Monthly EMI:</span>
+                      <strong style={{ color: "var(--green)" }}>₹{off.EMI?.toLocaleString("en-IN")}</strong>
+                    </div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span style={{ color: "var(--text-muted)" }}>Processing Fee:</span>
+                      <span>₹{off.processingFee?.toLocaleString("en-IN")}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span style={{ color: "var(--text-muted)" }}>Total Repayment:</span>
+                      <span>₹{off.totalRepayment?.toLocaleString("en-IN")}</span>
+                    </div>
+                  </div>
+
+                  {off.eligibilityReasons && off.eligibilityReasons.length > 0 && (
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 14, background: "rgba(16,185,129,0.06)", padding: 8, borderRadius: "var(--radius-sm)", border: "1px solid rgba(16,185,129,0.2)" }}>
+                      <div style={{ fontWeight: 700, marginBottom: 4, color: "var(--green)" }}>Eligibility Verification:</div>
+                      {off.eligibilityReasons.map((r, i) => (
+                        <div key={i} style={{ marginBottom: 2 }}>{r}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  className={`btn ${off.status === "SELECTED" ? "btn-secondary" : "btn-primary"} w-full`}
+                  style={{ padding: "10px 14px", fontWeight: 700 }}
+                  onClick={() => selectOffer(off.id)}
+                  disabled={off.status === "SELECTED" || selectingId === off.id}
+                >
+                  {selectingId === off.id ? "Routing to Lender..." : off.status === "SELECTED" ? "✓ Offer Selected (Routed)" : "Select Offer"}
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 

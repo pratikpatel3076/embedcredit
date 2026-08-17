@@ -1,6 +1,4 @@
-// ── Credit Engine (ported 1:1 from the frontend runCreditEngine) ──
-// Mirrors embedded-credit-marketplace.jsx exactly: same checks, same
-// rejection message strings, same scoring, same EMI formula.
+// ── Credit Engine & Marketplace Matching Service ──
 
 function calculateEMI(principal, ratePA, months) {
   const r = ratePA / 12 / 100;
@@ -15,7 +13,7 @@ function calculateEMI(principal, ratePA, months) {
 
 function scoreLender(lender, app, dti) {
   let score = 100;
-  score -= lender.interestRate * 2;
+  score -= (lender.interestRate || 12) * 2;
   score += (1 - dti) * 20;
   if (app.cibilScore > 750) score += 10;
   if (lender.disbursalTime === "T+0") score += 5;
@@ -23,13 +21,11 @@ function scoreLender(lender, app, dti) {
   return Math.round(score);
 }
 
-// application: plain object with amount, cibilScore, monthlyIncome,
-//              monthlyObligations, purpose, tenure (same shape as frontend mock)
-// lenders:     plain array of lender product objects
-// Returns:     { eligible: [{lender, emi, score, reasons:[]}],
-//                rejected: [{lender, emi:null, score:0, reasons:[...]}],
-//                dti: Number }
 function runCreditEngine(application, lenders) {
+  const amount = Number(application.amount || application.requestedAmount) || 0;
+  const tenure = Number(application.tenure || application.preferredTenure) || 0;
+  const purpose = String(application.purpose || "").toLowerCase();
+  const cibilScore = Number(application.cibilScore) || 0;
   const income = Number(application.monthlyIncome) || 1;
   const obligations = Number(application.monthlyObligations) || 0;
   const dti = obligations / income;
@@ -38,46 +34,72 @@ function runCreditEngine(application, lenders) {
 
   for (const lender of lenders) {
     const reasons = [];
+    const eligibleReasons = [];
     let pass = true;
 
-    if (application.amount < lender.minAmount) {
-      reasons.push(
-        `Amount ₹${application.amount.toLocaleString("en-IN")} below minimum ₹${lender.minAmount.toLocaleString("en-IN")}`
-      );
+    if (amount < lender.minAmount) {
+      reasons.push(`Requested amount ₹${amount.toLocaleString("en-IN")} below product minimum ₹${lender.minAmount.toLocaleString("en-IN")}`);
       pass = false;
+    } else {
+      eligibleReasons.push(`✓ Requested amount ₹${amount.toLocaleString("en-IN")} within product limits (₹${lender.minAmount.toLocaleString("en-IN")} - ₹${lender.maxAmount.toLocaleString("en-IN")})`);
     }
-    if (application.amount > lender.maxAmount) {
-      reasons.push(
-        `Amount exceeds max ₹${lender.maxAmount.toLocaleString("en-IN")}`
-      );
-      pass = false;
-    }
-    if (application.cibilScore < lender.minCibilScore) {
-      reasons.push(
-        `CIBIL ${application.cibilScore} below required ${lender.minCibilScore}`
-      );
-      pass = false;
-    }
-    if (dti > lender.maxDti) {
-      reasons.push(
-        `DTI ${(dti * 100).toFixed(1)}% exceeds max ${(lender.maxDti * 100).toFixed(0)}%`
-      );
-      pass = false;
-    }
-    if (!lender.supportedPurposes.includes(application.purpose)) {
-      reasons.push(`Purpose '${application.purpose}' not supported`);
-      pass = false;
-    }
-    if (!lender.tenureMonths.includes(application.tenure)) {
-      reasons.push(`Tenure ${application.tenure}M not offered`);
+
+    if (amount > lender.maxAmount) {
+      reasons.push(`Requested amount exceeds product maximum ₹${lender.maxAmount.toLocaleString("en-IN")}`);
       pass = false;
     }
 
-    const emi = calculateEMI(application.amount, lender.interestRate, application.tenure);
-    const score = scoreLender(lender, application, dti);
+    if (cibilScore < lender.minCibilScore) {
+      reasons.push(`CIBIL score ${cibilScore} below required minimum ${lender.minCibilScore}`);
+      pass = false;
+    } else {
+      eligibleReasons.push(`✓ CIBIL requirement satisfied (${cibilScore} >= ${lender.minCibilScore})`);
+    }
+
+    if (dti > lender.maxDti) {
+      reasons.push(`Debt-to-Income ratio ${(dti * 100).toFixed(1)}% exceeds max ${(lender.maxDti * 100).toFixed(0)}%`);
+      pass = false;
+    } else {
+      eligibleReasons.push(`✓ DTI within configured limit (${(dti * 100).toFixed(1)}% <= ${(lender.maxDti * 100).toFixed(0)}%)`);
+    }
+
+    const supportedPurposesLower = (lender.supportedPurposes || []).map((p) => p.toLowerCase());
+    const isPurposeSupported =
+      supportedPurposesLower.includes(purpose) ||
+      supportedPurposesLower.includes("personal") ||
+      supportedPurposesLower.includes("consumer") ||
+      purpose === "other";
+
+    if (!isPurposeSupported) {
+      reasons.push(`Requested purpose '${application.purpose}' not supported by lender`);
+      pass = false;
+    } else {
+      eligibleReasons.push(`✓ Loan purpose '${application.purpose}' supported`);
+    }
+
+    if (!lender.tenureMonths.includes(tenure)) {
+      reasons.push(`Requested tenure ${tenure}M not offered by lender`);
+      pass = false;
+    } else {
+      eligibleReasons.push(`✓ Requested tenure ${tenure} months supported`);
+    }
+
+    const emi = calculateEMI(amount, lender.interestRate, tenure);
+    const score = scoreLender(lender, { cibilScore }, dti);
 
     if (pass) {
-      eligible.push({ lender, emi, score, reasons: [] });
+      const apr = lender.APR || lender.interestRate + 0.5;
+      const processingFeeAmt = Math.round((amount * (lender.processingFee || 0)) / 100);
+      const totalRepayment = emi * tenure;
+      eligible.push({
+        lender,
+        emi,
+        score,
+        apr,
+        processingFee: processingFeeAmt,
+        totalRepayment,
+        reasons: eligibleReasons,
+      });
     } else {
       rejected.push({ lender, emi: null, score: 0, reasons });
     }
@@ -87,4 +109,21 @@ function runCreditEngine(application, lenders) {
   return { eligible, rejected, dti };
 }
 
-module.exports = { runCreditEngine, calculateEMI, scoreLender };
+function matchMarketplaceOffers(intent, creditProfile, user, lenders) {
+  const appObj = {
+    amount: intent.requestedAmount,
+    tenure: intent.preferredTenure,
+    purpose: intent.purpose,
+    cibilScore: creditProfile.cibilScore || 740,
+    monthlyIncome: creditProfile.monthlyIncome || user.monthlyIncome || 50000,
+    monthlyObligations: creditProfile.monthlyObligations || user.monthlyObligations || 10000,
+  };
+  const res = runCreditEngine(appObj, lenders);
+  return {
+    eligibleProducts: res.eligible,
+    ineligibleProducts: res.rejected,
+    dti: res.dti,
+  };
+}
+
+module.exports = { runCreditEngine, matchMarketplaceOffers, calculateEMI, scoreLender };

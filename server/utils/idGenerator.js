@@ -1,20 +1,47 @@
-// Generates the next business key (e.g. APP-004, L005) by scanning
-// existing `id` values for the given model and prefix.
 const LoanApplication = require("../models/LoanApplication");
 const LenderProduct = require("../models/LenderProduct");
 
-async function nextId(model, prefix) {
-  const docs = await model.find({}).select("id");
-  let max = 0;
-  for (const d of docs) {
-    const rest = String(d.id || "").slice(prefix.length);
-    const m = /^(\d+)$/.exec(rest);
-    if (m) max = Math.max(max, parseInt(m[1], 10));
-  }
-  return prefix + String(max + 1).padStart(3, "0");
+async function nextApplicationId() {
+  const count = await LoanApplication.countDocuments();
+  const nextNum = count + 1;
+  return `APP-${String(nextNum).padStart(3, "0")}`;
 }
 
-const nextApplicationId = () => nextId(LoanApplication, "APP-");
-const nextLenderId = () => nextId(LenderProduct, "L");
+async function nextLenderId() {
+  const count = await LenderProduct.countDocuments();
+  const nextNum = count + 1;
+  return `L${String(nextNum).padStart(3, "0")}`;
+}
 
-module.exports = { nextApplicationId, nextLenderId };
+async function nextUserId() {
+  const User = require("../models/User");
+  const count = await User.countDocuments({ role: "USER" });
+  return `USR-${String(count + 1).padStart(3, "0")}`;
+}
+
+async function nextIntentId() {
+  const LoanIntent = require("../models/LoanIntent");
+  const count = await LoanIntent.countDocuments();
+  return `INT-${String(count + 1).padStart(3, "0")}`;
+}
+
+async function nextOfferId() {
+  const LoanOffer = require("../models/LoanOffer");
+  const count = await LoanOffer.countDocuments();
+  return `OFFER-${String(count + 1).padStart(3, "0")}`;
+}
+
+async function nextConsentId() {
+  const ConsentRecord = require("../models/ConsentRecord");
+  const count = await ConsentRecord.countDocuments();
+  return `CNS-${String(count + 1).padStart(3, "0")}`;
+}
+
+module.exports = {
+  nextApplicationId,
+  nextLenderId,
+  nextUserId,
+  nextIntentId,
+  nextOfferId,
+  nextConsentId,
+};

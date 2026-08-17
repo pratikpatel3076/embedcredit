@@ -121,4 +121,143 @@ router.get(
   })
 );
 
+const DLA = require("../models/DLA");
+const WebhookLog = require("../models/WebhookLog");
+const DLGPortfolio = require("../models/DLGPortfolio");
+
+// PUT /api/lenders/:id  (ADMIN only — configure products without code changes)
+router.put(
+  "/lenders/:id",
+  authenticate,
+  requireRole("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const lender = await LenderProduct.findOne({ id: req.params.id });
+    if (!lender) return res.status(404).json({ error: "Lender product not found" });
+
+    const b = req.body || {};
+    if (b.minAmount !== undefined) lender.minAmount = Number(b.minAmount);
+    if (b.maxAmount !== undefined) lender.maxAmount = Number(b.maxAmount);
+    if (b.interestRate !== undefined) lender.interestRate = Number(b.interestRate);
+    if (b.APR !== undefined) lender.APR = Number(b.APR);
+    if (b.minCibilScore !== undefined) lender.minCibilScore = Number(b.minCibilScore);
+    if (b.maxDti !== undefined) lender.maxDti = Number(b.maxDti);
+    if (b.minIncome !== undefined) lender.minIncome = Number(b.minIncome);
+    if (b.processingFee !== undefined) lender.processingFee = Number(b.processingFee);
+    if (b.tenureMonths) lender.tenureMonths = b.tenureMonths.map(Number);
+    if (b.supportedPurposes) lender.supportedPurposes = b.supportedPurposes;
+    if (b.employmentTypes) lender.employmentTypes = b.employmentTypes;
+    if (b.active !== undefined) lender.active = Boolean(b.active);
+
+    await lender.save();
+    return res.json(lender);
+  })
+);
+
+// GET /api/admin/dla-partners  (ADMIN only)
+router.get(
+  "/admin/dla-partners",
+  authenticate,
+  requireRole("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const dlas = await DLA.find().sort({ createdAt: -1 });
+    return res.json(dlas);
+  })
+);
+
+// POST /api/admin/dla-partners  (ADMIN only)
+router.post(
+  "/admin/dla-partners",
+  authenticate,
+  requireRole("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const { id, name, apiKey, apiSecret, webhookUrl } = req.body || {};
+    if (!id || !name || !apiKey) {
+      return res.status(400).json({ error: "id, name, and apiKey are required" });
+    }
+
+    const dla = await DLA.create({
+      id,
+      name,
+      apiKey,
+      apiSecret: apiSecret || "sec_" + Math.random().toString(36).slice(2),
+      webhookUrl: webhookUrl || "",
+      status: "ACTIVE",
+    });
+
+    return res.status(201).json(dla);
+  })
+);
+
+// POST /api/admin/dla-partners/:id/regenerate-key  (ADMIN only)
+router.post(
+  "/admin/dla-partners/:id/regenerate-key",
+  authenticate,
+  requireRole("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const dla = await DLA.findOne({ id: req.params.id });
+    if (!dla) return res.status(404).json({ error: "DLA partner not found" });
+
+    dla.apiKey = "dla_key_" + Math.random().toString(36).slice(2, 12);
+    dla.apiSecret = "sec_" + Math.random().toString(36).slice(2, 16);
+    await dla.save();
+
+    return res.json({ id: dla.id, name: dla.name, newApiKey: dla.apiKey, status: dla.status });
+  })
+);
+
+// POST /api/admin/dla-partners/:id/test-webhook  (ADMIN only)
+router.post(
+  "/admin/dla-partners/:id/test-webhook",
+  authenticate,
+  requireRole("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const dla = await DLA.findOne({ id: req.params.id });
+    if (!dla) return res.status(404).json({ error: "DLA partner not found" });
+
+    const { dispatchWebhook } = require("../services/webhookService");
+    const testLog = await dispatchWebhook({
+      dlaId: dla.id,
+      eventType: "application.created",
+      resourceId: "APP-SANDBOX-TEST",
+      payload: { test: true, message: "Sandbox Webhook Test Dispatch" },
+    });
+
+    return res.json({ success: true, webhookLog: testLog });
+  })
+);
+
+// GET /api/admin/webhooks  (ADMIN only with pagination)
+router.get(
+  "/admin/webhooks",
+  authenticate,
+  requireRole("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const total = await WebhookLog.countDocuments();
+    const logs = await WebhookLog.find().sort({ createdAt: -1 }).skip(skip).limit(limit);
+
+    return res.json({ logs, total, page, limit });
+  })
+);
+
+// GET /api/admin/compliance-logs  (ADMIN only with pagination)
+router.get(
+  "/admin/compliance-logs",
+  authenticate,
+  requireRole("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const total = await ComplianceLog.countDocuments();
+    const logs = await ComplianceLog.find().sort({ createdAt: -1 }).skip(skip).limit(limit);
+
+    return res.json({ logs, total, page, limit });
+  })
+);
+
 module.exports = router;

@@ -2,8 +2,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 
-// Seeds the three platform users (one per role) on boot.
-// Credentials come from .env (see .env.example). Idempotent — upserts only missing users.
+// Seeds the platform users (one per role) on boot.
 async function seedUsers() {
   const defaults = [
     {
@@ -22,6 +21,20 @@ async function seedUsers() {
       password: process.env.SEED_LENDER_PASSWORD || "Lender@123",
       role: "LENDER",
       lenderId: process.env.SEED_LENDER_LENDER_ID || "L003",
+    },
+    {
+      username: process.env.SEED_USER_USERNAME || "user1",
+      password: process.env.SEED_USER_PASSWORD || "User@123",
+      role: "USER",
+      userId: "USR-001",
+      fullName: "Arjun Verma",
+      email: "arjun.verma@example.com",
+      mobile: "9876543210",
+      pan: "ABCPS1234D",
+      monthlyIncome: 75000,
+      monthlyObligations: 15000,
+      profileCompletion: 85,
+      kycStatus: "VERIFIED",
     },
   ];
 

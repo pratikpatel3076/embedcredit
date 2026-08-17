@@ -1,99 +1,116 @@
-// ── Validation middleware ────────────────────────────────────────
-const {
-  MIN_AMOUNT,
-  CIBIL_MIN,
-  CIBIL_MAX,
-  PURPOSES,
-  TENURE_OPTIONS,
-} = require("../config/constants");
+// ── Validation Helpers & Express Middleware ──
 
-const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
-const MOBILE_RE = /^[6-9]\d{9}$/;
+const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 
-function isPan(value) {
-  return PAN_RE.test(String(value || "").toUpperCase());
+function isPan(v) {
+  return typeof v === "string" && PAN_REGEX.test(v.toUpperCase());
 }
 
-function isMobile(value) {
-  return MOBILE_RE.test(String(value || ""));
-}
-
-// DLA application submission validator. Enforces the platform rule that
-// aaConsent MUST be true — otherwise 400.
 function validateApplication(req, res, next) {
   const b = req.body || {};
-  const errors = {};
+  const errors = [];
 
-  if (!b.borrowerName || !String(b.borrowerName).trim()) {
-    errors.borrowerName = "Borrower name is required";
+  if (!b.borrowerName || typeof b.borrowerName !== "string" || !b.borrowerName.trim()) {
+    errors.push("borrowerName is required");
   }
   if (!isPan(b.pan)) {
-    errors.pan = "PAN must match format ABCDE1234F";
+    errors.push("Valid 10-character PAN is required (e.g. ABCDE1234F)");
   }
-  if (!isMobile(b.mobile)) {
-    errors.mobile = "Mobile must be a valid 10-digit Indian number starting with 6-9";
+  if (!b.mobile || !/^[6-9]\d{9}$/.test(String(b.mobile))) {
+    errors.push("Valid 10-digit Indian mobile number is required");
   }
-  const amount = Number(b.amount);
-  if (Number.isNaN(amount) || amount < MIN_AMOUNT) {
-    errors.amount = `Loan amount must be at least ₹${MIN_AMOUNT}`;
+  if (typeof b.amount !== "number" || b.amount < 5000) {
+    errors.push("amount must be a number >= 5,000");
   }
-  if (!PURPOSES.includes(b.purpose)) {
-    errors.purpose = "Invalid loan purpose";
+  if (!b.purpose || typeof b.purpose !== "string") {
+    errors.push("purpose is required");
   }
-  const tenure = Number(b.tenure);
-  if (!TENURE_OPTIONS.includes(tenure)) {
-    errors.tenure = "Invalid tenure";
+  if (typeof b.tenure !== "number" || b.tenure < 1) {
+    errors.push("tenure must be a number of months >= 1");
   }
-  const cibil = Number(b.cibilScore);
-  if (Number.isNaN(cibil) || cibil < CIBIL_MIN || cibil > CIBIL_MAX) {
-    errors.cibilScore = `CIBIL score must be between ${CIBIL_MIN} and ${CIBIL_MAX}`;
+  if (typeof b.cibilScore !== "number" || b.cibilScore < 300 || b.cibilScore > 900) {
+    errors.push("cibilScore must be a number between 300 and 900");
   }
-  const income = Number(b.monthlyIncome);
-  if (Number.isNaN(income) || income < 10000) {
-    errors.monthlyIncome = "Monthly income must be at least ₹10,000";
-  }
-  const obligations = Number(b.monthlyObligations || 0);
-  if (Number.isFinite(income) && obligations >= income) {
-    errors.monthlyObligations = "Monthly obligations cannot equal or exceed income";
+  if (typeof b.monthlyIncome !== "number" || b.monthlyIncome <= 0) {
+    errors.push("monthlyIncome must be a positive number");
   }
   if (b.aaConsent !== true) {
-    errors.aaConsent = "AA consent is mandatory (must be true)";
+    errors.push("aaConsent must be true");
   }
 
-  if (Object.keys(errors).length) {
+  if (errors.length) {
     return res.status(400).json({ error: "Validation failed", errors });
   }
 
-  req.body.pan = String(b.pan).toUpperCase();
-  req.body.amount = amount;
-  req.body.tenure = tenure;
-  req.body.cibilScore = cibil;
-  req.body.monthlyIncome = income;
-  req.body.monthlyObligations = obligations;
   next();
 }
 
-// Lender onboarding validator (ADMIN only).
 function validateLender(req, res, next) {
   const b = req.body || {};
-  const errors = {};
+  const errors = [];
 
-  if (!b.lenderName) errors.lenderName = "lenderName is required";
-  if (!["Bank", "NBFC"].includes(b.type)) errors.type = "type must be Bank or NBFC";
-  if (Number(b.minAmount) < 0 || Number(b.maxAmount) <= Number(b.minAmount)) {
-    errors.amount = "Invalid minAmount / maxAmount range";
+  if (!b.lenderName || typeof b.lenderName !== "string") {
+    errors.push("lenderName is required");
   }
-  if (Number(b.interestRate) <= 0) errors.interestRate = "interestRate must be > 0";
-  if (b.minCibilScore === undefined) errors.minCibilScore = "minCibilScore is required";
-  if (Number(b.maxDti) <= 0 || Number(b.maxDti) > 1) errors.maxDti = "maxDti must be between 0 and 1";
-  if (Number(b.processingFee) < 0) errors.processingFee = "processingFee cannot be negative";
-  if (!Array.isArray(b.tenureMonths) || !b.tenureMonths.length) errors.tenureMonths = "tenureMonths must be a non-empty array";
-  if (!Array.isArray(b.supportedPurposes) || !b.supportedPurposes.length) errors.supportedPurposes = "supportedPurposes must be a non-empty array";
+  if (!["Bank", "NBFC"].includes(b.type)) {
+    errors.push("type must be 'Bank' or 'NBFC'");
+  }
+  if (typeof b.minAmount !== "number" || typeof b.maxAmount !== "number" || b.minAmount >= b.maxAmount) {
+    errors.push("minAmount must be less than maxAmount");
+  }
+  if (typeof b.interestRate !== "number" || b.interestRate <= 0) {
+    errors.push("interestRate must be > 0");
+  }
+  if (!Array.isArray(b.tenureMonths) || !b.tenureMonths.length) {
+    errors.push("tenureMonths must be a non-empty array");
+  }
+  if (typeof b.minCibilScore !== "number") {
+    errors.push("minCibilScore is required");
+  }
+  if (typeof b.maxDti !== "number" || b.maxDti <= 0 || b.maxDti > 1) {
+    errors.push("maxDti must be between 0 and 1");
+  }
+  if (!Array.isArray(b.supportedPurposes) || !b.supportedPurposes.length) {
+    errors.push("supportedPurposes must be a non-empty array");
+  }
 
-  if (Object.keys(errors).length) {
+  if (errors.length) {
     return res.status(400).json({ error: "Validation failed", errors });
   }
+
   next();
 }
 
-module.exports = { validateApplication, validateLender, isPan, isMobile };
+const VALID_TRANSITIONS = {
+  DRAFT: ["SUBMITTED", "CANCELLED"],
+  SUBMITTED: ["ELIGIBILITY_CHECK", "OFFERS_AVAILABLE", "ROUTED", "REJECTED", "CANCELLED"],
+  ELIGIBILITY_CHECK: ["OFFERS_AVAILABLE", "REJECTED", "CANCELLED"],
+  OFFERS_AVAILABLE: ["OFFER_SELECTED", "EXPIRED", "CANCELLED"],
+  OFFER_SELECTED: ["KFS_GENERATED", "KFS_ACCEPTED", "ROUTED", "CANCELLED"],
+  KFS_GENERATED: ["KFS_ACCEPTED", "CANCELLED"],
+  KFS_ACCEPTED: ["ROUTED", "LENDER_REVIEW", "CANCELLED"],
+  ROUTED: ["LENDER_REVIEW", "APPROVED", "REJECTED", "CANCELLED"],
+  LENDER_REVIEW: ["APPROVED", "REJECTED", "WITHDRAWN"],
+  APPROVED: ["DISBURSAL_PENDING", "DISBURSED", "CANCELLED"],
+  DISBURSAL_PENDING: ["DISBURSED", "CANCELLED"],
+  DISBURSED: ["ACTIVE", "CLOSED"],
+  ACTIVE: ["CLOSED"],
+  // Legacy compatibility
+  new: ["pending_review", "routed", "rejected"],
+  pending_review: ["routed", "rejected"],
+  routed: ["disbursed", "rejected"],
+};
+
+function isValidStateTransition(fromStatus, toStatus) {
+  if (fromStatus === toStatus) return true;
+  const allowed = VALID_TRANSITIONS[fromStatus] || [];
+  return allowed.includes(toStatus);
+}
+
+module.exports = {
+  isPan,
+  validateApplication,
+  validateLender,
+  isValidStateTransition,
+  VALID_TRANSITIONS,
+};

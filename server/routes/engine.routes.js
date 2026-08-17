@@ -11,12 +11,12 @@ const asyncHandler = require("../utils/asyncHandler");
 
 const router = express.Router();
 
-// POST /api/applications/:id/run-engine  (DLA / ADMIN)
+// POST /api/applications/:id/run-engine  (DLA only)
 // Runs eligibility matching across ALL lender products. Does not mutate state.
 router.post(
   "/applications/:id/run-engine",
   authenticate,
-  requireRole("DLA", "ADMIN"),
+  requireRole("DLA"),
   canAccessApplication,
   asyncHandler(async (req, res) => {
     const app = req.application.toObject();
@@ -26,7 +26,7 @@ router.post(
   })
 );
 
-// POST /api/applications/:id/route  (DLA / ADMIN)
+// POST /api/applications/:id/route  (DLA only)
 // Body: { lenderId }
 // Gates: KFS_BEFORE_ROUTING (KFS must be generated now, before the route is
 // persisted) + FLDG_CAP check. Generates + stores the KFS, creates the
@@ -34,7 +34,7 @@ router.post(
 router.post(
   "/applications/:id/route",
   authenticate,
-  requireRole("DLA", "ADMIN"),
+  requireRole("DLA"),
   canAccessApplication,
   kfsBeforeRouting,
   fldgCapCheck,

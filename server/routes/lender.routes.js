@@ -169,15 +169,19 @@ router.post(
   })
 );
 
-// POST /api/applications/:id/disburse  (LENDER / ADMIN)
+// POST /api/applications/:id/disburse  (LENDER ONLY — ADMIN is forbidden)
 router.post(
   "/applications/:id/disburse",
   authenticate,
-  requireRole("LENDER", "ADMIN"),
+  requireRole("LENDER"),
   canAccessApplication,
   kfsBeforeDisbursal,
   asyncHandler(async (req, res) => {
     const app = req.application;
+    if (req.user.role !== "LENDER" || app.routedTo !== req.user.lenderId) {
+      return res.status(403).json({ error: "Only the assigned lending partner can record disbursal for this loan" });
+    }
+
     const prev = app.status;
     app.status = "disbursed";
     await app.save();
@@ -196,14 +200,14 @@ router.post(
       pass: true,
       previousState: prev,
       newState: "disbursed",
-      details: { amount: app.amount },
+      details: { amount: app.amount, lenderId: req.user.lenderId },
     });
 
     dispatchWebhook({
       dlaId: app.dlaId,
       eventType: "loan.disbursed",
       resourceId: app.id,
-      payload: { applicationId: app.id, amount: app.amount },
+      payload: { applicationId: app.id, amount: app.amount, lenderId: req.user.lenderId },
     });
 
     return res.json({

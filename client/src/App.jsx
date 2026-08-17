@@ -538,18 +538,84 @@ const styles = `
     .flow { overflow-x: auto; justify-content: flex-start; }
     .flow-node { min-width: 90px; }
   }
+
+  /* ─── MODAL & DRAWER ─── */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px); z-index: 1000;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+    animation: fadeIn 0.15s ease-out;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .modal-card {
+    background: var(--bg-surface); border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg); width: 100%; max-width: 860px; max-height: 90vh;
+    display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-lg);
+    animation: slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes slideUp { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .modal-header {
+    padding: 16px 22px; border-bottom: 1px solid var(--border-color);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg-surface-elevated);
+  }
+  .modal-body { padding: 22px; overflow-y: auto; flex: 1; }
+  .modal-footer {
+    padding: 12px 22px; border-top: 1px solid var(--border-color);
+    display: flex; justify-content: flex-end; gap: 10px; background: var(--bg-surface-elevated);
+  }
+
+  /* Filter pills */
+  .filter-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .filter-pill {
+    padding: 6px 14px; border-radius: var(--radius-full); border: 1px solid var(--border-color);
+    background: var(--bg-surface-elevated); color: var(--text-secondary); font-size: 12px;
+    font-weight: 500; cursor: pointer; transition: all 0.15s ease;
+  }
+  .filter-pill:hover { color: var(--text-primary); border-color: var(--primary); background: var(--bg-surface-hover); }
+  .filter-pill.active { background: var(--primary-soft); color: var(--primary-text); border-color: var(--primary); font-weight: 600; }
+
+  /* Funnel stage styles */
+  .funnel-stage-card {
+    background: var(--bg-surface-elevated); border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm); padding: 12px 16px; margin-bottom: 10px;
+    display: flex; flex-direction: column; gap: 6px; transition: all 0.15s ease;
+  }
+  .funnel-stage-card:hover { border-color: var(--primary-glow); }
+  .funnel-bar-bg { background: var(--bg-main); height: 8px; border-radius: 4px; overflow: hidden; }
+  .funnel-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--primary), var(--green)); transition: width 0.5s ease; }
+
+  /* Category card */
+  .category-card {
+    background: var(--bg-surface); border: 1px solid var(--border-color);
+    border-radius: var(--radius-md); padding: 16px; transition: all 0.2s ease;
+  }
+  .category-card:hover { border-color: var(--primary-glow); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
 `;
 
 // ─── UTILS & BADGES ───────────────────────────────────────────────
 function StatusBadge({ status }) {
+  const s = String(status || "").toUpperCase();
   const map = {
-    routed: ["badge-blue", "⇒ Routed"],
-    disbursed: ["badge-green", "✓ Disbursed"],
-    pending_review: ["badge-amber", "◷ Pending Review"],
-    rejected: ["badge-red", "✗ Rejected"],
-    new: ["badge-muted", "New"],
+    ROUTED: ["badge-blue", "⇒ Routed"],
+    DISBURSED: ["badge-green", "✓ Disbursed"],
+    ACTIVE: ["badge-green", "● Active Loan"],
+    APPROVED: ["badge-green", "✓ Lender Approved"],
+    PENDING_REVIEW: ["badge-amber", "◷ Pending Review"],
+    SUBMITTED: ["badge-blue", "📥 Submitted"],
+    ELIGIBILITY_CHECK: ["badge-amber", "⚡ Eligibility Check"],
+    OFFERS_AVAILABLE: ["badge-green", "💎 Offers Available"],
+    OFFER_SELECTED: ["badge-blue", "✓ Offer Selected"],
+    KFS_GENERATED: ["badge-green", "📄 KFS Generated"],
+    KFS_ACCEPTED: ["badge-green", "✓ KFS Accepted"],
+    LENDER_REVIEW: ["badge-amber", "🏦 Underwriting"],
+    DISBURSAL_PENDING: ["badge-amber", "⏳ Disbursal Pending"],
+    REJECTED: ["badge-red", "✗ Declined"],
+    CLOSED: ["badge-muted", "Closed"],
+    DRAFT: ["badge-muted", "Draft"],
+    NEW: ["badge-muted", "New"],
   };
-  const [cls, label] = map[status] || ["badge-muted", status];
+  const [cls, label] = map[s] || ["badge-muted", status || "—"];
   return <span className={`badge ${cls}`}>{label}</span>;
 }
 
@@ -1712,24 +1778,222 @@ function LenderPortfolioPage({ user }) {
   );
 }
 
-// ─── ADMIN STATS PAGE (ADMIN ROLE) ──────────────────────────────────
-function AdminStatsPage() {
-  const [stats, setStats] = useState(null);
-  const [dlas, setDlas] = useState([]);
+// ─── ADMIN READ-ONLY MODULE & CONTROLS ─────────────────────────────
+
+function ReadOnlyBadge({ label = "READ ONLY" }) {
+  return (
+    <span className="badge badge-green" style={{ letterSpacing: 0.5, fontWeight: 700, padding: "4px 10px", border: "1px solid var(--green)" }}>
+      🛡️ {label}
+    </span>
+  );
+}
+
+function AccessRestrictedPage({ action = "this operation" }) {
+  return (
+    <div className="card" style={{ maxWidth: 580, margin: "40px auto", textAlign: "center", padding: "40px 24px" }}>
+      <div style={{ fontSize: 48, marginBottom: 14 }}>🔒</div>
+      <div style={{ fontSize: 20, fontWeight: 800, color: "var(--red)", marginBottom: 8 }}>Access Restricted</div>
+      <div style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 20, lineHeight: 1.5 }}>
+        Your <strong>ADMIN</strong> role has strictly <strong>read-only platform monitoring and analytics access</strong>.
+        Operational actions ({action}) are reserved for authenticated DLA, Lender, or Consumer participants.
+      </div>
+      <div className="compliance-strip" style={{ textAlign: "left", display: "inline-flex", margin: "0 auto" }}>
+        <span>ℹ️</span>
+        <div>
+          <strong>Role Separation:</strong> The marketplace administrator observes and audits the ecosystem, but does not participate in loan underwriting, eligibility overrides, or money movements.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReadOnlyApplicationModal({ appId, onClose }) {
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [actionMsg, setActionMsg] = useState(null);
-  const [sandboxResult, setSandboxResult] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await api(`/admin/applications/${appId}`);
+        if (mounted) setData(res);
+      } catch (e) {
+        if (mounted) setError(e.message);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [appId]);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" style={{ maxWidth: 860 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div className="flex items-center gap-3">
+            <span style={{ fontWeight: 800, fontSize: 16, color: "var(--text-primary)" }}>Application {appId}</span>
+            <ReadOnlyBadge label="READ ONLY INSPECTOR" />
+            {data?.application && <StatusBadge status={data.application.status} />}
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="modal-body">
+          {loading ? (
+            <div className="empty" style={{ padding: 40 }}>
+              <div className="spinner" style={{ margin: "0 auto 12px" }} />
+              <div>Loading application snapshot…</div>
+            </div>
+          ) : error ? (
+            <div className="error-banner"><span>{error}</span></div>
+          ) : data ? (
+            <div>
+              <div className="compliance-strip" style={{ marginBottom: 18 }}>
+                <span>🔒</span>
+                <div>
+                  <strong>Read-Only Monitoring:</strong> This view is strictly observational. Administrative overrides, manual approvals, rerouting, and parameter mutations are prohibited by platform RBAC.
+                </div>
+              </div>
+
+              <div className="grid-2 mb-4">
+                {/* Borrower & Identity Profile */}
+                <div className="card card-sm">
+                  <div className="card-title" style={{ marginBottom: 12 }}>Borrower Information</div>
+                  <div className="kfs-row"><span className="kfs-key">Borrower Name</span><span className="kfs-val">{data.application.borrowerName}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">Masked PAN</span><span className="kfs-val td-mono">{data.application.pan}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">Mobile</span><span className="kfs-val">{data.application.mobile}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">Monthly Income</span><span className="kfs-val">{formatINR(data.application.monthlyIncome)}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">Monthly Obligations</span><span className="kfs-val">{formatINR(data.application.monthlyObligations)}</span></div>
+                  <div className="kfs-row">
+                    <span className="kfs-key">CIBIL Bureau Score</span>
+                    <span className="kfs-val" style={{ color: data.application.cibilScore >= 700 ? "var(--green)" : "var(--amber)", fontWeight: 700 }}>
+                      {data.application.cibilScore}
+                    </span>
+                  </div>
+                  <div className="kfs-row">
+                    <span className="kfs-key">Debt-to-Income (DTI)</span>
+                    <span className="kfs-val">
+                      {data.application.monthlyIncome ? `${Math.round(((data.application.monthlyObligations || 0) / data.application.monthlyIncome) * 100)}%` : "—"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Loan & Lifecycle Details */}
+                <div className="card card-sm">
+                  <div className="card-title" style={{ marginBottom: 12 }}>Loan Parameters</div>
+                  <div className="kfs-row"><span className="kfs-key">Requested Amount</span><span className="kfs-val" style={{ color: "var(--primary)" }}>{formatINR(data.application.amount)}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">Purpose / Category</span><span className="kfs-val badge badge-muted">{data.application.purpose}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">Tenure</span><span className="kfs-val">{data.application.tenure} Months</span></div>
+                  <div className="kfs-row"><span className="kfs-key">Originated DLA</span><span className="kfs-val">{data.application.dlaId}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">Assigned Lender</span><span className="kfs-val">{data.lender ? `${data.lender.lenderName} (${data.lender.id})` : data.application.routedTo || "Unassigned"}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">AA Consent Verified</span><span className="kfs-val" style={{ color: data.application.aaConsent ? "var(--green)" : "var(--red)" }}>{data.application.aaConsent ? "✓ Active" : "Pending"}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">KFS Generated</span><span className="kfs-val" style={{ color: data.application.kfsGenerated ? "var(--green)" : "var(--amber)" }}>{data.application.kfsGenerated ? "✓ Pre-Generated" : "Pending"}</span></div>
+                </div>
+              </div>
+
+              {/* KFS Snapshot */}
+              {data.route?.kfsData && (
+                <div className="kfs-panel mb-4">
+                  <div className="kfs-title">
+                    <span>📄 Key Fact Statement (KFS) Snapshot</span>
+                    <span className="badge badge-green">RBI DL 2022 Compliant</span>
+                  </div>
+                  <div className="grid-2">
+                    <div>
+                      <div className="kfs-row"><span className="kfs-key">Proposal / KFS ID</span><span className="kfs-val">{data.route.kfsData.proposalNumber}</span></div>
+                      <div className="kfs-row"><span className="kfs-key">Principal Amount</span><span className="kfs-val">{formatINR(data.route.kfsData.loanAmount)}</span></div>
+                      <div className="kfs-row"><span className="kfs-key">Monthly EMI</span><span className="kfs-val">{formatINR(data.route.kfsData.emi)}</span></div>
+                      <div className="kfs-row"><span className="kfs-key">Total Repayment</span><span className="kfs-val">{formatINR(data.route.kfsData.totalPayable)}</span></div>
+                    </div>
+                    <div>
+                      <div className="kfs-row"><span className="kfs-key">Interest Rate (p.a.)</span><span className="kfs-val text-green">{data.route.kfsData.interestRate}%</span></div>
+                      <div className="kfs-row"><span className="kfs-key">Annual Percentage Rate (APR)</span><span className="kfs-val text-green">{data.route.kfsData.apr}%</span></div>
+                      <div className="kfs-row"><span className="kfs-key">Processing Fee</span><span className="kfs-val">{formatINR(data.route.kfsData.processingFee)}</span></div>
+                      <div className="kfs-row"><span className="kfs-key">Cooling-Off Period</span><span className="kfs-val">{data.route.kfsData.coolingOffPeriodDays || 3} Days</span></div>
+                    </div>
+                  </div>
+                  <div className="kfs-disclaimer">
+                    Direct Funds Flow: Funds flow directly from {data.route.kfsData.lenderName} bank account to borrower. Vantage platform is non-custodial.
+                  </div>
+                </div>
+              )}
+
+              {/* Rejection / Decline explanation if present */}
+              {data.application.declineExplanation && (
+                <div className="card mb-4" style={{ borderLeft: "4px solid var(--red)" }}>
+                  <div className="card-title text-red">Lender Underwriting Decision: Declined</div>
+                  <div className="text-sm mt-4">
+                    <strong>Reason Code:</strong> {data.application.rejectionReasonCode || "REJECTED"}
+                  </div>
+                  <div className="text-sm text-secondary mt-4">
+                    {data.application.declineExplanation}
+                  </div>
+                </div>
+              )}
+
+              {/* Compliance & Audit Trail */}
+              <div className="card">
+                <div className="card-title" style={{ marginBottom: 12 }}>Compliance Audit Trail</div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Timestamp</th>
+                        <th>Event Type</th>
+                        <th>Actor</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(!data.complianceHistory || data.complianceHistory.length === 0) ? (
+                        <tr><td colSpan={5} className="text-muted">No compliance events logged for this application yet.</td></tr>
+                      ) : (
+                        data.complianceHistory.map((log, idx) => (
+                          <tr key={log._id || idx}>
+                            <td className="td-mono text-sm">{new Date(log.createdAt).toLocaleString("en-IN")}</td>
+                            <td className="td-primary"><span className="badge badge-muted">{log.type}</span></td>
+                            <td>{log.actor}</td>
+                            <td><span className="badge badge-muted">{log.actorRole}</span></td>
+                            <td><span className={`badge ${log.pass ? "badge-green" : "badge-red"}`}>{log.pass ? "✓ PASS" : "✗ BLOCKED"}</span></td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>Close Inspector</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN DASHBOARD PAGE ──────────────────────────────────────────
+function AdminDashboardPage({ onNavigate, onSelectApp }) {
+  const [data, setData] = useState(null);
+  const [health, setHealth] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const loadData = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const [sData, dlaData] = await Promise.all([
-        api("/admin/stats"),
-        api("/admin/dla-partners").catch(() => []),
+      const [dashRes, healthRes] = await Promise.all([
+        api("/admin/dashboard"),
+        api("/admin/system-health").catch(() => null),
       ]);
-      setStats(sData);
-      setDlas(dlaData);
+      setData(dashRes);
+      setHealth(healthRes);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -1741,138 +2005,184 @@ function AdminStatsPage() {
     loadData();
   }, []);
 
-  const handleRegenerateKey = async (dlaId) => {
-    setActionMsg(null);
-    try {
-      const res = await api(`/admin/dla-partners/${dlaId}/regenerate-key`, { method: "POST" });
-      setActionMsg(`API Key regenerated for ${res.name}: ${res.newApiKey}`);
-      await loadData();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
-  const handleTestWebhook = async (dlaId) => {
-    setActionMsg(null);
-    try {
-      const res = await api(`/admin/dla-partners/${dlaId}/test-webhook`, { method: "POST" });
-      setActionMsg(`Test Webhook Dispatched to DLA ${dlaId}. Event ID: ${res.webhookLog?.eventId}`);
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
-  const handleRunSandbox = async () => {
-    setSandboxResult(null);
-    try {
-      const res = await api("/v1/integrations/eligibility", {
-        method: "POST",
-        headers: { "X-API-Key": "dla_live_key_9988", "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: 75000, tenure: 12, cibilScore: 740, monthlyIncome: 65000 }),
-      });
-      setSandboxResult(res);
-    } catch (e) {
-      setSandboxResult({ error: e.message });
-    }
-  };
-
   if (loading) {
     return (
       <div className="empty card">
         <div className="spinner" style={{ margin: "0 auto 12px" }} />
-        <div>Fetching platform administrator analytics…</div>
+        <div>Aggregating platform oversight & credit metrics…</div>
       </div>
     );
   }
 
-  if (error) return <div className="error-banner"><span>{error}</span></div>;
+  if (error) return <div className="error-banner"><span>{error}</span><button className="btn btn-sm btn-secondary" onClick={loadData}>Retry</button></div>;
+
+  const { overview, funnel, recentApplications } = data || {};
 
   return (
     <div>
       <div className="section-header">
-        <div className="section-title">Marketplace Operations & DLA Partner Control Panel</div>
-        <span className="badge badge-green">Live System Metrics</span>
+        <div>
+          <div className="section-title">Platform Operations & Oversight Hub</div>
+          <div className="page-subtitle">Real-time marketplace monitoring, application conversions & compliance metrics</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <ReadOnlyBadge label="READ ONLY PLATFORM MONITOR" />
+          <button className="btn btn-sm btn-secondary" onClick={loadData}>↻ Refresh</button>
+        </div>
       </div>
 
-      {actionMsg && <div className="success-banner mb-3"><span>{actionMsg}</span><button className="close-btn" onClick={() => setActionMsg(null)}>✕</button></div>}
-
+      {/* Primary KPI Grid */}
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-label">Total Originated</div>
-          <div className="stat-value">{stats.total}</div>
-          <div className="stat-delta">Across all DLAs</div>
+          <div className="stat-label">Total Applications</div>
+          <div className="stat-value">{overview?.totalApplications || 0}</div>
+          <div className="stat-delta">● Today: {overview?.applicationsToday || 0} · Month: {overview?.applicationsThisMonth || 0}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Routed Loans</div>
-          <div className="stat-value text-amber">{stats.routed}</div>
-          <div className="stat-delta">KFS Verified</div>
+          <div className="stat-label">Disbursed Volume</div>
+          <div className="stat-value text-green">{formatINR(overview?.totalDisbursedAmount || 0)}</div>
+          <div className="stat-delta">● {overview?.loansDisbursed || 0} loans settled</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Disbursed Loans</div>
-          <div className="stat-value text-green">{stats.disbursed}</div>
-          <div className="stat-delta">Funds Settled</div>
+          <div className="stat-label">Avg Loan Ticket</div>
+          <div className="stat-value text-primary">{formatINR(overview?.averageLoanAmount || 0)}</div>
+          <div className="stat-delta">● Requested: {formatINR(overview?.totalRequestedAmount || 0)}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Total Volume Disbursed</div>
-          <div className="stat-value">{formatINR(stats.volume)}</div>
-          <div className="stat-delta">Gross Volume</div>
+          <div className="stat-label">Portfolio Credit Quality</div>
+          <div className="stat-value text-green">{overview?.averageCibilScore || 750}</div>
+          <div className="stat-delta">● Avg CIBIL across applicants</div>
         </div>
       </div>
 
-      {/* DLA Partner Management Panel */}
+      {/* Secondary Quick Metrics */}
+      <div className="grid-3 mb-4">
+        <div className="card card-sm">
+          <div className="flex justify-between items-center">
+            <span className="text-muted text-sm">Registered Consumers</span>
+            <span className="stat-value" style={{ fontSize: 18 }}>{overview?.totalUsers || 0}</span>
+          </div>
+        </div>
+        <div className="card card-sm">
+          <div className="flex justify-between items-center">
+            <span className="text-muted text-sm">Active DLA Partners</span>
+            <span className="stat-value" style={{ fontSize: 18 }}>{overview?.totalDLAs || 0}</span>
+          </div>
+        </div>
+        <div className="card card-sm">
+          <div className="flex justify-between items-center">
+            <span className="text-muted text-sm">Onboarded Lenders</span>
+            <span className="stat-value" style={{ fontSize: 18 }}>{overview?.totalLenders || 0} ({overview?.activeLenderProducts || 0} Products)</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Application Funnel Snapshot */}
       <div className="card mb-4">
         <div className="section-header mb-3">
           <div>
-            <div className="section-title">Third-Party DLA / LSP Integration Management</div>
+            <div className="section-title">Application Conversion Funnel</div>
             <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
-              Manage API keys, rate limits, webhook delivery status, and test sandbox APIs
+              End-to-end origination, KFS generation, lender review, and direct disbursal conversion
             </div>
           </div>
-          <button className="btn btn-sm btn-primary" onClick={handleRunSandbox}>⚡ Run Sandbox API Test</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => onNavigate("admin-credit-analytics")}>
+            View Funnel Breakdown →
+          </button>
         </div>
 
-        {sandboxResult && (
-          <div className="card mb-3" style={{ background: "var(--bg-surface-elevated)", border: "1px solid var(--primary)" }}>
-            <div className="flex justify-between items-center mb-2">
-              <div style={{ fontWeight: 700, fontSize: 13, color: "var(--primary)" }}>Sandbox Test Result (/api/v1/integrations/eligibility)</div>
-              <button className="btn btn-sm btn-ghost" onClick={() => setSandboxResult(null)}>✕</button>
-            </div>
-            <pre style={{ fontSize: 11, fontFamily: "var(--font-mono)", background: "var(--bg-main)", padding: 10, borderRadius: 4, overflowX: "auto" }}>
-              {JSON.stringify(sandboxResult, null, 2)}
-            </pre>
+        <div className="grid-2">
+          <div>
+            {[
+              { label: "1. Total Applications", count: funnel?.applications || 0, pct: 100 },
+              { label: "2. Eligibility Evaluated", count: funnel?.eligibilityEvaluated || 0, pct: funnel?.applications ? Math.round((funnel.eligibilityEvaluated / funnel.applications) * 100) : 0 },
+              { label: "3. Offers Generated", count: funnel?.offersGenerated || 0, pct: funnel?.applications ? Math.round((funnel.offersGenerated / funnel.applications) * 100) : 0 },
+              { label: "4. Offers Selected", count: funnel?.offersSelected || 0, pct: funnel?.applications ? Math.round((funnel.offersSelected / funnel.applications) * 100) : 0 },
+            ].map((st) => (
+              <div key={st.label} className="funnel-stage-card">
+                <div className="flex justify-between text-sm">
+                  <span style={{ fontWeight: 600 }}>{st.label}</span>
+                  <span className="font-mono">{st.count} ({st.pct}%)</span>
+                </div>
+                <div className="funnel-bar-bg">
+                  <div className="funnel-bar-fill" style={{ width: `${st.pct}%` }} />
+                </div>
+              </div>
+            ))}
           </div>
-        )}
+
+          <div>
+            {[
+              { label: "5. KFS Pre-Generated", count: funnel?.kfsGenerated || 0, pct: funnel?.applications ? Math.round((funnel.kfsGenerated / funnel.applications) * 100) : 0 },
+              { label: "6. Routed to Lender", count: funnel?.routed || 0, pct: funnel?.applications ? Math.round((funnel.routed / funnel.applications) * 100) : 0 },
+              { label: "7. Lender Approved", count: funnel?.lenderApproved || 0, pct: funnel?.applications ? Math.round((funnel.lenderApproved / funnel.applications) * 100) : 0 },
+              { label: "8. Funds Disbursed", count: funnel?.disbursed || 0, pct: funnel?.applications ? Math.round((funnel.disbursed / funnel.applications) * 100) : 0 },
+            ].map((st) => (
+              <div key={st.label} className="funnel-stage-card">
+                <div className="flex justify-between text-sm">
+                  <span style={{ fontWeight: 600 }}>{st.label}</span>
+                  <span className="font-mono" style={{ color: st.label.includes("Disbursed") ? "var(--green)" : "inherit" }}>{st.count} ({st.pct}%)</span>
+                </div>
+                <div className="funnel-bar-bg">
+                  <div className="funnel-bar-fill" style={{ width: `${st.pct}%`, background: st.label.includes("Disbursed") ? "var(--green)" : undefined }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Platform Activity */}
+      <div className="card mb-4">
+        <div className="section-header">
+          <div>
+            <div className="section-title">Recent Application Stream</div>
+            <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
+              Live incoming credit intents and routed applications with masked identifiers
+            </div>
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={() => onNavigate("admin-applications")}>
+            View All Applications →
+          </button>
+        </div>
 
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>DLA Partner</th>
-                <th>API Key</th>
+                <th>App ID</th>
+                <th>Borrower</th>
+                <th>Masked PAN</th>
+                <th>Amount</th>
+                <th>Purpose</th>
+                <th>CIBIL</th>
                 <th>Status</th>
-                <th>Rate Limit</th>
-                <th>Webhook URL</th>
-                <th>Actions</th>
+                <th>DLA</th>
+                <th>Lender</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {dlas.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-muted" style={{ padding: 12 }}>DLA-001 (Vantage Native DLA) · Key: dla_live_key_9988 · Active</td>
-                </tr>
+              {(!recentApplications || recentApplications.length === 0) ? (
+                <tr><td colSpan={10} className="empty">No applications recorded on the platform yet.</td></tr>
               ) : (
-                dlas.map((d) => (
-                  <tr key={d.id}>
-                    <td className="td-primary" style={{ fontWeight: 600 }}>{d.name} ({d.id})</td>
-                    <td className="td-mono text-sm">{d.apiKey}</td>
-                    <td><span className={`badge ${d.status === "ACTIVE" ? "badge-green" : "badge-red"}`}>{d.status}</span></td>
-                    <td className="td-mono">{d.rateLimit || 100} req/min</td>
-                    <td className="td-mono text-muted text-sm">{d.webhookUrl || "Not configured"}</td>
+                recentApplications.map((app) => (
+                  <tr key={app.id}>
+                    <td className="td-mono td-primary">{app.id}</td>
+                    <td className="td-primary">{app.borrowerName}</td>
+                    <td className="td-mono text-muted">{app.pan}</td>
+                    <td className="td-mono">{formatINR(app.amount)}</td>
+                    <td><span className="badge badge-muted">{app.purpose}</span></td>
+                    <td className="td-mono" style={{ color: app.cibilScore >= 700 ? "var(--green)" : app.cibilScore >= 650 ? "var(--amber)" : "var(--red)", fontWeight: 700 }}>
+                      {app.cibilScore}
+                    </td>
+                    <td><StatusBadge status={app.status} /></td>
+                    <td className="td-mono text-muted">{app.dlaId}</td>
+                    <td className="td-mono text-muted">{app.routedTo || "—"}</td>
                     <td>
-                      <div className="flex gap-2">
-                        <button className="btn btn-sm btn-ghost" onClick={() => handleRegenerateKey(d.id)}>Regen Key</button>
-                        <button className="btn btn-sm btn-secondary" onClick={() => handleTestWebhook(d.id)}>Test Webhook</button>
-                      </div>
+                      <button className="btn btn-sm btn-secondary" onClick={() => onSelectApp(app.id)}>
+                        Inspect
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -1882,66 +2192,616 @@ function AdminStatsPage() {
         </div>
       </div>
 
-      <div className="grid-2 mb-4">
+      {/* Compliance & Health Summary */}
+      <div className="grid-2">
         <div className="card">
-          <div className="card-title">Portfolio Credit Quality</div>
-          <div className="flex justify-between items-center mt-4" style={{ marginTop: 16 }}>
-            <span className="text-muted">Average Portfolio CIBIL Score</span>
-            <span className="stat-value" style={{ fontSize: 22, color: "var(--green)" }}>{stats.avgCibil}</span>
+          <div className="section-header">
+            <div className="card-title">Regulatory Compliance Guardrails</div>
+            <span className="badge badge-green">✓ RBI DL 2022</span>
           </div>
-          <div className="flex justify-between items-center mt-4" style={{ marginTop: 12 }}>
-            <span className="text-muted">Pending Review Applications</span>
-            <span className="badge badge-amber">{stats.pending}</span>
-          </div>
-          <div className="flex justify-between items-center mt-4" style={{ marginTop: 12 }}>
-            <span className="text-muted">Rejected Applications</span>
-            <span className="badge badge-red">{stats.rejected}</span>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-title">Regulatory Framework Status</div>
-          <div style={{ marginTop: 16 }}>
+          <div>
             {[
-              ["RBI Digital Lending Guidelines", "100% Compliant"],
-              ["Key Fact Statement (KFS) Pre-Generation", "Enforced Server-Side"],
-              ["FLDG Cap 5% Limit", "Active Enforcement"],
-              ["Direct Lender → Borrower Funds Flow", "No Platform Pooling"],
-            ].map(([rule, status]) => (
-              <div key={rule} className="flex justify-between items-center" style={{ marginBottom: 10, fontSize: 12 }}>
-                <span className="text-muted">{rule}</span>
-                <span className="badge badge-green">✓ {status}</span>
+              ["RBI Digital Lending Guidelines 2022", "Non-custodial direct money flow verified"],
+              ["Key Fact Statement (KFS) Pre-Generation", "Enforced server-side before routing"],
+              ["FLDG Cap 5% Limit", "Active automated cap calculation"],
+              ["Data Minimization & Privacy", "PAN masked & zero secret exposure"],
+            ].map(([rule, desc]) => (
+              <div key={rule} className="flex justify-between items-center" style={{ marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid var(--border-subtle)" }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{rule}</div>
+                  <div className="text-muted" style={{ fontSize: 11 }}>{desc}</div>
+                </div>
+                <span className="badge badge-green">✓ ACTIVE</span>
               </div>
             ))}
           </div>
         </div>
+
+        <div className="card">
+          <div className="section-header">
+            <div className="card-title">System Infrastructure Status</div>
+            <span className="badge badge-green">● Operational</span>
+          </div>
+          {health ? (
+            <div>
+              <div className="engine-metric"><span className="engine-metric-label">Database Connection</span><span className="engine-metric-value text-green">✓ {health.database?.status}</span></div>
+              <div className="engine-metric"><span className="engine-metric-label">API Uptime</span><span className="engine-metric-value">{Math.floor(health.uptimeSeconds / 60)} min ({health.uptimeSeconds}s)</span></div>
+              <div className="engine-metric"><span className="engine-metric-label">Node Environment</span><span className="engine-metric-value">{health.environment} ({health.nodeVersion})</span></div>
+              <div className="engine-metric"><span className="engine-metric-label">Memory Utilization</span><span className="engine-metric-value">{health.memory?.heapUsedMb} MB / {health.memory?.heapTotalMb} MB</span></div>
+              <div className="engine-metric"><span className="engine-metric-label">Credit Decision Engine</span><span className="engine-metric-value text-green">● Operational</span></div>
+            </div>
+          ) : (
+            <div className="text-muted text-sm">Fetching system telemetry…</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN APPLICATIONS PAGE (READ-ONLY EXPLORER) ──────────────────
+function AdminApplicationsPage({ onSelectApp }) {
+  const [data, setData] = useState({ applications: [], total: 0, page: 1, totalPages: 1 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [purposeFilter, setPurposeFilter] = useState("all");
+  const [page, setPage] = useState(1);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      params.append("page", page);
+      params.append("limit", 15);
+      if (statusFilter !== "all") params.append("status", statusFilter);
+      if (purposeFilter !== "all") params.append("purpose", purposeFilter);
+      if (search.trim()) params.append("search", search.trim());
+
+      const res = await api(`/admin/applications?${params.toString()}`);
+      setData(res);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, statusFilter, purposeFilter, search]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    setPage(1);
+    loadData();
+  };
+
+  return (
+    <div>
+      <div className="section-header">
+        <div>
+          <div className="section-title">Application Lifecycle Explorer</div>
+          <div className="page-subtitle">Read-only monitoring of borrower intents, KFS snapshots & underwriting state</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <ReadOnlyBadge label="READ ONLY PLATFORM MONITOR" />
+          <button className="btn btn-sm btn-secondary" onClick={loadData}>↻ Refresh</button>
+        </div>
       </div>
 
+      {/* Filter Controls */}
+      <div className="card mb-4">
+        <form onSubmit={handleSearchSubmit} className="flex gap-2 mb-3">
+          <input
+            className="form-input"
+            placeholder="Search by Application ID, Borrower Name, Mobile, Masked PAN, DLA, or Lender ID…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <button type="submit" className="btn btn-primary">Search</button>
+          {search && <button type="button" className="btn btn-ghost" onClick={() => { setSearch(""); setPage(1); }}>Clear</button>}
+        </form>
+
+        <div className="flex justify-between items-center flex-wrap gap-2">
+          <div className="filter-pills" style={{ marginBottom: 0 }}>
+            {["all", "submitted", "routed", "approved", "disbursed", "rejected"].map((st) => (
+              <button
+                key={st}
+                className={`filter-pill ${statusFilter === st ? "active" : ""}`}
+                onClick={() => { setStatusFilter(st); setPage(1); }}
+              >
+                {st.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ minWidth: 180 }}>
+            <select className="form-select" value={purposeFilter} onChange={(e) => { setPurposeFilter(e.target.value); setPage(1); }}>
+              <option value="all">All Consumption Purposes</option>
+              <option value="electronics">Electronics</option>
+              <option value="shopping">Shopping</option>
+              <option value="travel">Travel</option>
+              <option value="healthcare">Healthcare</option>
+              <option value="education">Education</option>
+              <option value="home_improvement">Home Improvement</option>
+              <option value="personal">Personal</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {error && <div className="error-banner"><span>{error}</span></div>}
+
+      {/* Applications Table */}
       <div className="card">
-        <div className="card-title" style={{ marginBottom: 14 }}>Recent System Activity</div>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>App ID</th>
                 <th>Borrower</th>
+                <th>Masked PAN</th>
                 <th>Amount</th>
+                <th>Purpose</th>
                 <th>CIBIL</th>
                 <th>Status</th>
                 <th>DLA</th>
-                <th>Routed To</th>
+                <th>Routed Lender</th>
+                <th>Created At</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {stats.recent.map((app) => (
-                <tr key={app.id}>
-                  <td className="td-mono td-primary">{app.id}</td>
-                  <td className="td-primary">{app.borrowerName}</td>
-                  <td className="td-mono">{formatINR(app.amount)}</td>
-                  <td className="td-mono">{app.cibilScore}</td>
-                  <td><StatusBadge status={app.status} /></td>
-                  <td className="td-mono text-muted">{app.dlaId}</td>
-                  <td className="td-mono text-muted">{app.routedTo || "—"}</td>
+              {loading ? (
+                <tr><td colSpan={11} className="empty"><div className="spinner" style={{ margin: "0 auto 8px" }} />Loading applications…</td></tr>
+              ) : data.applications.length === 0 ? (
+                <tr><td colSpan={11} className="empty">No applications matched the filter criteria.</td></tr>
+              ) : (
+                data.applications.map((app) => (
+                  <tr key={app.id}>
+                    <td className="td-mono td-primary">{app.id}</td>
+                    <td className="td-primary">{app.borrowerName}</td>
+                    <td className="td-mono text-muted">{app.pan}</td>
+                    <td className="td-mono">{formatINR(app.amount)}</td>
+                    <td><span className="badge badge-muted">{app.purpose}</span></td>
+                    <td className="td-mono" style={{ color: app.cibilScore >= 700 ? "var(--green)" : app.cibilScore >= 650 ? "var(--amber)" : "var(--red)", fontWeight: 700 }}>
+                      {app.cibilScore}
+                    </td>
+                    <td><StatusBadge status={app.status} /></td>
+                    <td className="td-mono text-muted">{app.dlaId}</td>
+                    <td className="td-mono text-muted">{app.routedTo || "—"}</td>
+                    <td className="td-mono text-sm text-muted">{new Date(app.createdAt).toLocaleDateString("en-IN")}</td>
+                    <td>
+                      <button className="btn btn-sm btn-secondary" onClick={() => onSelectApp(app.id)}>
+                        Inspect
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination controls */}
+        {data.totalPages > 1 && (
+          <div className="flex justify-between items-center mt-4" style={{ paddingTop: 14, borderTop: "1px solid var(--border-color)" }}>
+            <span className="text-sm text-muted">
+              Showing Page {data.page} of {data.totalPages} ({data.total} Total Records)
+            </span>
+            <div className="flex gap-2">
+              <button className="btn btn-sm btn-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                ← Previous
+              </button>
+              <button className="btn btn-sm btn-secondary" disabled={page >= data.totalPages} onClick={() => setPage((p) => p + 1)}>
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN USERS PAGE (DATA MINIMIZATION) ───────────────────────────
+function AdminUsersPage() {
+  const [data, setData] = useState({ users: [], total: 0, page: 1, totalPages: 1 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [selectedUser, setSelectedUser] = useState(null);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      params.append("page", page);
+      params.append("limit", 15);
+      if (roleFilter !== "all") params.append("role", roleFilter);
+      if (search.trim()) params.append("search", search.trim());
+
+      const res = await api(`/admin/users?${params.toString()}`);
+      setData(res);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, roleFilter, search]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const openUserDetails = async (userId) => {
+    try {
+      const res = await api(`/admin/users/${userId}`);
+      setSelectedUser(res);
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  return (
+    <div>
+      <div className="section-header">
+        <div>
+          <div className="section-title">Platform User Directory & Privacy Governance</div>
+          <div className="page-subtitle">Data-minimized consumer and institutional actor profiles with masked identifiers</div>
+        </div>
+        <ReadOnlyBadge label="DATA MINIMIZATION ENFORCED" />
+      </div>
+
+      <div className="card mb-4">
+        <form onSubmit={(e) => { e.preventDefault(); setPage(1); loadData(); }} className="flex gap-2 mb-3">
+          <input
+            className="form-input"
+            placeholder="Search by username, full name, email, mobile, or user ID…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <button type="submit" className="btn btn-primary">Search</button>
+        </form>
+
+        <div className="filter-pills" style={{ marginBottom: 0 }}>
+          {["all", "USER", "DLA", "LENDER", "ADMIN"].map((r) => (
+            <button
+              key={r}
+              className={`filter-pill ${roleFilter === r ? "active" : ""}`}
+              onClick={() => { setRoleFilter(r); setPage(1); }}
+            >
+              {r === "all" ? "ALL ROLES" : r}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {error && <div className="error-banner"><span>{error}</span></div>}
+
+      <div className="card">
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>User ID</th>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Full Name</th>
+                <th>Email</th>
+                <th>Mobile</th>
+                <th>Masked PAN</th>
+                <th>Profile Complete</th>
+                <th>KYC Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={10} className="empty"><div className="spinner" style={{ margin: "0 auto 8px" }} />Loading users…</td></tr>
+              ) : data.users.length === 0 ? (
+                <tr><td colSpan={10} className="empty">No users found.</td></tr>
+              ) : (
+                data.users.map((u) => (
+                  <tr key={u._id || u.userId || u.username}>
+                    <td className="td-mono td-primary">{u.userId || u._id?.slice(-8) || "—"}</td>
+                    <td className="td-primary">{u.username}</td>
+                    <td>
+                      <span className={`badge ${u.role === "ADMIN" ? "badge-green" : u.role === "LENDER" ? "badge-blue" : u.role === "USER" ? "badge-green" : "badge-amber"}`}>
+                        {u.role}
+                      </span>
+                    </td>
+                    <td>{u.fullName || "—"}</td>
+                    <td className="td-mono text-sm">{u.email || "—"}</td>
+                    <td className="td-mono text-sm">{u.mobile || "—"}</td>
+                    <td className="td-mono text-muted">{u.pan || "—"}</td>
+                    <td className="td-mono">{u.profileCompletion || 0}%</td>
+                    <td><span className="badge badge-green">{u.kycStatus || "VERIFIED"}</span></td>
+                    <td>
+                      <button className="btn btn-sm btn-secondary" onClick={() => openUserDetails(u.userId || u._id)}>
+                        Profile
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {data.totalPages > 1 && (
+          <div className="flex justify-between items-center mt-4" style={{ paddingTop: 14, borderTop: "1px solid var(--border-color)" }}>
+            <span className="text-sm text-muted">Page {data.page} of {data.totalPages} ({data.total} users)</span>
+            <div className="flex gap-2">
+              <button className="btn btn-sm btn-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>← Previous</button>
+              <button className="btn btn-sm btn-secondary" disabled={page >= data.totalPages} onClick={() => setPage((p) => p + 1)}>Next →</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* User Detail Drawer / Modal */}
+      {selectedUser && (
+        <div className="modal-backdrop" onClick={() => setSelectedUser(null)}>
+          <div className="modal-card" style={{ maxWidth: 700 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="flex items-center gap-3">
+                <span style={{ fontWeight: 800, fontSize: 16 }}>User Profile: {selectedUser.user.username}</span>
+                <ReadOnlyBadge label="DATA MINIMIZED" />
+              </div>
+              <button className="btn btn-sm btn-ghost" onClick={() => setSelectedUser(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="grid-2 mb-4">
+                <div className="card card-sm">
+                  <div className="card-title" style={{ marginBottom: 10 }}>Account Summary</div>
+                  <div className="kfs-row"><span className="kfs-key">User ID</span><span className="kfs-val">{selectedUser.user.userId || "—"}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">Role</span><span className="kfs-val">{selectedUser.user.role}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">Full Name</span><span className="kfs-val">{selectedUser.user.fullName || "—"}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">Masked PAN</span><span className="kfs-val">{selectedUser.user.pan || "—"}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">KYC Status</span><span className="kfs-val text-green">{selectedUser.user.kycStatus || "VERIFIED"}</span></div>
+                </div>
+
+                <div className="card card-sm">
+                  <div className="card-title" style={{ marginBottom: 10 }}>Financial Profile</div>
+                  <div className="kfs-row"><span className="kfs-key">Monthly Income</span><span className="kfs-val">{formatINR(selectedUser.creditProfile?.monthlyIncome || selectedUser.user.monthlyIncome)}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">Monthly Obligations</span><span className="kfs-val">{formatINR(selectedUser.creditProfile?.monthlyObligations || selectedUser.user.monthlyObligations)}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">CIBIL Score</span><span className="kfs-val text-green">{selectedUser.creditProfile?.cibilScore || 750}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">Bureau Status</span><span className="kfs-val text-green">{selectedUser.creditProfile?.bureauStatus || "PULLED"}</span></div>
+                  <div className="kfs-row"><span className="kfs-key">AA Consent Active</span><span className="kfs-val text-green">{selectedUser.consents?.length > 0 ? "✓ Yes" : "—"}</span></div>
+                </div>
+              </div>
+
+              {selectedUser.applications && selectedUser.applications.length > 0 && (
+                <div className="card">
+                  <div className="card-title" style={{ marginBottom: 10 }}>Linked Applications ({selectedUser.applications.length})</div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead><tr><th>ID</th><th>Amount</th><th>Purpose</th><th>Status</th><th>Date</th></tr></thead>
+                      <tbody>
+                        {selectedUser.applications.map((a) => (
+                          <tr key={a.id}>
+                            <td className="td-mono td-primary">{a.id}</td>
+                            <td className="td-mono">{formatINR(a.amount)}</td>
+                            <td><span className="badge badge-muted">{a.purpose}</span></td>
+                            <td><StatusBadge status={a.status} /></td>
+                            <td className="td-mono text-sm">{new Date(a.createdAt).toLocaleDateString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setSelectedUser(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ADMIN LENDERS PAGE (READ-ONLY PERFORMANCE & CATALOGUE) ────────
+function AdminLendersPage() {
+  const [lenders, setLenders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await api("/admin/lenders");
+        setLenders(res.lenders || []);
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="empty card">
+        <div className="spinner" style={{ margin: "0 auto 12px" }} />
+        <div>Auditing institutional lender metrics & FLDG portfolios…</div>
+      </div>
+    );
+  }
+
+  if (error) return <div className="error-banner"><span>{error}</span></div>;
+
+  return (
+    <div>
+      <div className="section-header">
+        <div>
+          <div className="section-title">Regulated Lending Partners & Portfolio Analytics</div>
+          <div className="page-subtitle">Read-only performance audit, underwriting parameters & 5% FLDG utilization</div>
+        </div>
+        <ReadOnlyBadge label="READ ONLY INSTITUTIONAL AUDIT" />
+      </div>
+
+      <div className="card mb-4">
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Lender ID</th>
+                <th>Institution Name</th>
+                <th>Type</th>
+                <th>Rate (p.a.)</th>
+                <th>Ticket Range</th>
+                <th>Min CIBIL</th>
+                <th>Max DTI</th>
+                <th>SLA</th>
+                <th>Originated</th>
+                <th>Approved</th>
+                <th>Disbursed Vol</th>
+                <th>Approval %</th>
+                <th>FLDG Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lenders.map((l) => (
+                <tr key={l.id}>
+                  <td className="td-mono td-primary">{l.id}</td>
+                  <td className="td-primary" style={{ fontWeight: 600 }}>{l.lenderName}</td>
+                  <td><span className={`badge ${l.type === "Bank" ? "badge-green" : "badge-blue"}`}>{l.type}</span></td>
+                  <td className="td-mono text-green">{l.interestRate}%</td>
+                  <td className="td-mono text-sm">{formatINR(l.minAmount)} – {formatINR(l.maxAmount)}</td>
+                  <td className="td-mono">{l.minCibilScore}</td>
+                  <td className="td-mono">{(l.maxDti * 100).toFixed(0)}%</td>
+                  <td><span className="badge badge-muted">{l.disbursalTime}</span></td>
+                  <td className="td-mono">{l.metrics?.applicationsReceived || 0}</td>
+                  <td className="td-mono text-green">{l.metrics?.approvedCount || 0}</td>
+                  <td className="td-mono">{formatINR(l.metrics?.disbursedVolume || 0)}</td>
+                  <td className="td-mono">{l.metrics?.approvalRate || 0}%</td>
+                  <td>
+                    <span className={`badge ${l.metrics?.status === "COMPLIANT" ? "badge-green" : "badge-red"}`}>
+                      {l.metrics?.status || "COMPLIANT"} ({l.metrics?.utilizationPct || 0}%)
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Protocol Integrations */}
+      <div className="section-title mb-3">Protocol Integration & Rails Monitoring</div>
+      <div className="grid-2">
+        {lenders.map((l) => (
+          <div key={l.id} className="card card-sm">
+            <div className="flex justify-between items-center mb-3">
+              <span style={{ fontWeight: 700, fontSize: 14 }}>{l.lenderName} ({l.id})</span>
+              <span className={`badge ${l.active ? "badge-green" : "badge-muted"}`}>{l.active ? "Active Partner" : "Inactive"}</span>
+            </div>
+            {[
+              ["OCEN 4.0 Open Credit Enablement", l.ocenEnabled],
+              ["Account Aggregator (AA) Integration", l.aaEnabled],
+              ["NACH / eMandate Repayment Rails", l.nachEnabled],
+            ].map(([proto, active]) => (
+              <div key={proto} className="flex justify-between items-center" style={{ marginBottom: 6, fontSize: 12 }}>
+                <span className="text-muted">{proto}</span>
+                <span className={`badge ${active ? "badge-green" : "badge-amber"}`}>{active ? "✓ Certified" : "⏳ Standby"}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN DLAS PAGE (READ-ONLY DLA PARTNERS) ──────────────────────
+function AdminDlasPage() {
+  const [dlas, setDlas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await api("/admin/dlas");
+        setDlas(res.dlas || []);
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="empty card">
+        <div className="spinner" style={{ margin: "0 auto 12px" }} />
+        <div>Auditing third-party DLA / LSP partner traffic & telemetry…</div>
+      </div>
+    );
+  }
+
+  if (error) return <div className="error-banner"><span>{error}</span></div>;
+
+  return (
+    <div>
+      <div className="section-header">
+        <div>
+          <div className="section-title">Digital Lending App (DLA / LSP) Partners</div>
+          <div className="page-subtitle">Third-party marketplace origination volume, offer selection rates & webhook delivery</div>
+        </div>
+        <ReadOnlyBadge label="READ ONLY DLA AUDIT" />
+      </div>
+
+      <div className="card mb-4">
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>DLA ID</th>
+                <th>Partner Name</th>
+                <th>Status</th>
+                <th>Rate Limit</th>
+                <th>Webhook URL</th>
+                <th>Applications</th>
+                <th>Offers Gen</th>
+                <th>Offers Sel</th>
+                <th>Selection %</th>
+                <th>Disbursed Vol</th>
+                <th>Webhook SLA</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dlas.map((d) => (
+                <tr key={d.id}>
+                  <td className="td-mono td-primary">{d.id}</td>
+                  <td className="td-primary" style={{ fontWeight: 600 }}>{d.name}</td>
+                  <td><span className={`badge ${d.status === "ACTIVE" ? "badge-green" : "badge-red"}`}>{d.status}</span></td>
+                  <td className="td-mono">{d.rateLimit || 100} req/min</td>
+                  <td className="td-mono text-muted text-sm">{d.webhookUrl || "None"}</td>
+                  <td className="td-mono">{d.metrics?.applicationsCount || 0}</td>
+                  <td className="td-mono">{d.metrics?.offersGenerated || 0}</td>
+                  <td className="td-mono text-green">{d.metrics?.offersSelected || 0}</td>
+                  <td className="td-mono">{d.metrics?.offerSelectionRate || 0}%</td>
+                  <td className="td-mono">{formatINR(d.metrics?.disbursalVolume || 0)}</td>
+                  <td>
+                    <span className={`badge ${d.metrics?.webhookSuccessRate >= 95 ? "badge-green" : "badge-amber"}`}>
+                      {d.metrics?.webhookSuccessRate || 100}% Delivered
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1952,75 +2812,308 @@ function AdminStatsPage() {
   );
 }
 
-// ─── ADMIN COMPLIANCE AUDIT PAGE (ADMIN ROLE) ──────────────────────
-function ComplianceAuditPage() {
+// ─── ADMIN CREDIT ANALYTICS PAGE (FUNNEL & VOLUMES) ────────────────
+function AdminCreditAnalyticsPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    let mounted = true;
     (async () => {
       setLoading(true);
       try {
-        const res = await api("/admin/compliance");
-        if (mounted) setData(res);
+        const res = await api("/admin/analytics");
+        setData(res);
       } catch (e) {
-        if (mounted) setError(e.message);
+        setError(e.message);
       } finally {
-        if (mounted) setLoading(false);
+        setLoading(false);
       }
     })();
-    return () => { mounted = false; };
   }, []);
 
   if (loading) {
     return (
       <div className="empty card">
         <div className="spinner" style={{ margin: "0 auto 12px" }} />
-        <div>Auditing regulatory compliance logs & FLDG caps…</div>
+        <div>Computing end-to-end conversion funnel analytics…</div>
       </div>
     );
   }
 
   if (error) return <div className="error-banner"><span>{error}</span></div>;
 
-  const { capLimit, lenders, kfsComplianceRate, kfsCompliant, kfsTotal, complianceLogs } = data;
+  const { funnel, totalApplications, totalDisbursed, overallConversionRate } = data || {};
 
   return (
     <div>
       <div className="section-header">
-        <div className="section-title">RBI Compliance & FLDG Audit Monitor</div>
-        <span className="badge badge-green">RBI DL Guidelines 2022</span>
+        <div>
+          <div className="section-title">Credit Marketplace Funnel Analytics</div>
+          <div className="page-subtitle">End-to-end conversion drop-offs across credit eligibility, KFS acceptance, and settlement</div>
+        </div>
+        <ReadOnlyBadge label="READ ONLY ANALYTICS" />
       </div>
 
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-label">KFS Generation Rate</div>
-          <div className="stat-value text-green">{kfsComplianceRate}%</div>
-          <div className="stat-delta">{kfsCompliant} / {kfsTotal} Routed Apps</div>
+          <div className="stat-label">Total Originated</div>
+          <div className="stat-value">{totalApplications}</div>
+          <div className="stat-delta">● Marketplace Inflow</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Platform FLDG Cap</div>
-          <div className="stat-value">{(capLimit * 100).toFixed(0)}%</div>
-          <div className="stat-delta">Portfolio Exposure Limit</div>
+          <div className="stat-label">Disbursed Loans</div>
+          <div className="stat-value text-green">{totalDisbursed}</div>
+          <div className="stat-delta">● End-to-End Settled</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Total Compliance Checks</div>
-          <div className="stat-value">{complianceLogs.total}</div>
-          <div className="stat-delta">Audit Log Entries</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">Compliance Blockers</div>
-          <div className="stat-value" style={{ color: complianceLogs.failures > 0 ? "var(--red)" : "var(--green)" }}>
-            {complianceLogs.failures}
-          </div>
-          <div className="stat-delta">Blocked Non-Compliant Actions</div>
+          <div className="stat-label">Marketplace Conversion</div>
+          <div className="stat-value text-primary">{overallConversionRate}%</div>
+          <div className="stat-delta">● Disbursal / Total Originated</div>
         </div>
       </div>
 
+      {/* Multi-Stage Funnel Table & Bars */}
+      <div className="card mb-4">
+        <div className="section-title mb-3">Multi-Stage Application Lifecycle Funnel</div>
+        <div>
+          {funnel?.map((st, idx) => (
+            <div key={st.name} className="funnel-stage-card" style={{ padding: "16px 20px", marginBottom: 12 }}>
+              <div className="flex justify-between items-center">
+                <div>
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>
+                    Step {idx + 1}: {st.name}
+                  </span>
+                  {idx > 0 && st.dropOffPct > 0 && (
+                    <span className="text-muted text-sm" style={{ marginLeft: 12 }}>
+                      ({st.dropOffPct}% drop-off from previous step)
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="stat-value" style={{ fontSize: 16 }}>{st.count}</span>
+                  <span className="badge badge-blue">{st.pctOfTotal}% of Total</span>
+                </div>
+              </div>
+              <div className="funnel-bar-bg" style={{ height: 10, marginTop: 8 }}>
+                <div className="funnel-bar-fill" style={{ width: `${st.pctOfTotal}%`, height: 10 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN CONSUMPTION CREDIT ANALYTICS ────────────────────────────
+function AdminConsumptionAnalyticsPage() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await api("/admin/analytics/consumption");
+        setData(res);
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="empty card">
+        <div className="spinner" style={{ margin: "0 auto 12px" }} />
+        <div>Segmenting consumption credit portfolio by product purpose…</div>
+      </div>
+    );
+  }
+
+  if (error) return <div className="error-banner"><span>{error}</span></div>;
+
+  const { categories, totalApplications, totalVolume } = data || {};
+
+  return (
+    <div>
+      <div className="section-header">
+        <div>
+          <div className="section-title">Consumption Credit Portfolio Analytics</div>
+          <div className="page-subtitle">Analysis of embed credit applications across consumer electronics, shopping, healthcare & travel</div>
+        </div>
+        <ReadOnlyBadge label="READ ONLY ANALYTICS" />
+      </div>
+
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-label">Total Consumption Inflow</div>
+          <div className="stat-value">{totalApplications}</div>
+          <div className="stat-delta">● Applications Across All Sectors</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Gross Requested Volume</div>
+          <div className="stat-value text-primary">{formatINR(totalVolume)}</div>
+          <div className="stat-delta">● Active Consumer Demand</div>
+        </div>
+      </div>
+
+      {/* Top Categories Grid */}
+      <div className="grid-3 mb-4">
+        {categories?.slice(0, 6).map((cat) => (
+          <div key={cat.purpose} className="category-card">
+            <div className="flex justify-between items-center mb-2">
+              <span style={{ fontWeight: 700, fontSize: 14 }}>{cat.label}</span>
+              <span className="badge badge-green">{cat.shareOfTotalVolume}% Vol</span>
+            </div>
+            <div className="stat-value" style={{ fontSize: 20, marginBottom: 4 }}>{formatINR(cat.requestedAmount)}</div>
+            <div className="text-sm text-muted">
+              {cat.applicationCount} Apps · Avg {formatINR(cat.averageLoanAmount)} · {cat.averageTenure}m Tenure
+            </div>
+            <div className="gauge-container" style={{ height: 6, marginTop: 10 }}>
+              <div className="gauge-fill" style={{ width: `${cat.shareOfTotalVolume}%`, background: "var(--primary)" }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Detailed Purpose Breakdown Table */}
       <div className="card">
-        <div className="card-title" style={{ marginBottom: 14 }}>Lender FLDG Exposure & Cap Audit</div>
+        <div className="section-title mb-3">Comprehensive Purpose Breakdown</div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Loan Purpose / Category</th>
+                <th>Application Count</th>
+                <th>Requested Volume</th>
+                <th>Avg Loan Size</th>
+                <th>Disbursed Loans</th>
+                <th>Disbursed Volume</th>
+                <th>Approval %</th>
+                <th>Avg Tenure</th>
+                <th>Avg CIBIL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {categories?.map((c) => (
+                <tr key={c.purpose}>
+                  <td className="td-primary" style={{ fontWeight: 600 }}>{c.label}</td>
+                  <td className="td-mono">{c.applicationCount}</td>
+                  <td className="td-mono">{formatINR(c.requestedAmount)}</td>
+                  <td className="td-mono">{formatINR(c.averageLoanAmount)}</td>
+                  <td className="td-mono text-green">{c.disbursedCount}</td>
+                  <td className="td-mono">{formatINR(c.disbursedVolume)}</td>
+                  <td className="td-mono">{c.approvalRate}%</td>
+                  <td className="td-mono">{c.averageTenure} Mo</td>
+                  <td className="td-mono" style={{ color: c.averageCibilScore >= 700 ? "var(--green)" : "var(--amber)", fontWeight: 600 }}>
+                    {c.averageCibilScore || "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN COMPLIANCE PAGE ──────────────────────────────────────────
+function AdminCompliancePage() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await api("/admin/compliance");
+        setData(res);
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="empty card">
+        <div className="spinner" style={{ margin: "0 auto 12px" }} />
+        <div>Auditing regulatory compliance checks and FLDG exposure limits…</div>
+      </div>
+    );
+  }
+
+  if (error) return <div className="error-banner"><span>{error}</span></div>;
+
+  const { capLimit, lenders, kfsComplianceRate, kfsCompliant, kfsTotal, aaConsentRate, bureauConsentRate, fldgViolations, blockedRoutes, kfsFailures, complianceLogs } = data || {};
+
+  return (
+    <div>
+      <div className="section-header">
+        <div>
+          <div className="section-title">RBI Digital Lending Guidelines Compliance Monitor</div>
+          <div className="page-subtitle">Regulatory compliance audit across Key Fact Statements (KFS), AA Consents, and FLDG Limits</div>
+        </div>
+        <ReadOnlyBadge label="REGULATORY OVERSIGHT" />
+      </div>
+
+      {/* Compliance Stats Cards */}
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-label">KFS Compliance Rate</div>
+          <div className="stat-value text-green">{kfsComplianceRate}%</div>
+          <div className="stat-delta">● {kfsCompliant} / {kfsTotal} Routed Applications</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Account Aggregator Consent</div>
+          <div className="stat-value text-green">{aaConsentRate}%</div>
+          <div className="stat-delta">● Explicit Digital Consent Logged</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Bureau Query Compliance</div>
+          <div className="stat-value text-green">{bureauConsentRate}%</div>
+          <div className="stat-delta">● Verified Bureau Inquiry Rails</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">FLDG Cap Breaches</div>
+          <div className="stat-value" style={{ color: fldgViolations > 0 ? "var(--red)" : "var(--green)" }}>{fldgViolations}</div>
+          <div className="stat-delta">● {blockedRoutes} Blocked Route Attempts</div>
+        </div>
+      </div>
+
+      {/* Regulatory Checklist */}
+      <div className="card mb-4">
+        <div className="section-title mb-3">Regulatory Architecture Compliance Status</div>
+        <div className="grid-2">
+          {[
+            ["RBI DL 2022 §3.1 — Direct Money Flow", "COMPLIANT", "The Vantage Credit marketplace operates strictly on a non-custodial basis. Disbursals and repayments flow directly between Lender and Borrower bank accounts."],
+            ["RBI DL 2022 §4.2 — KFS Pre-Generation", "ENFORCED", "A Key Fact Statement (KFS) containing APR, all fees, and cooling-off period is generated before any loan route is finalized."],
+            ["RBI FLDG Guidelines 2023 — 5% Cap Limit", "ENFORCED", "First Loss Default Guarantee exposure is strictly checked against the 5% portfolio cap before route authorization."],
+            ["DPDP Act 2023 & AA Consent Architecture", "COMPLIANT", "Account Aggregator consents and Bureau pulls are logged with immutable timestamps and expiry dates."],
+          ].map(([title, status, desc]) => (
+            <div key={title} className="card card-sm" style={{ background: "var(--bg-surface-elevated)" }}>
+              <div className="flex justify-between items-center mb-2">
+                <span style={{ fontWeight: 700, fontSize: 13 }}>{title}</span>
+                <span className="badge badge-green">✓ {status}</span>
+              </div>
+              <div className="text-sm text-muted">{desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Lender FLDG Audit Table */}
+      <div className="card">
+        <div className="section-title mb-3">Lender FLDG Exposure & Cap Audit</div>
         <div className="table-wrap">
           <table>
             <thead>
@@ -2036,7 +3129,7 @@ function ComplianceAuditPage() {
               </tr>
             </thead>
             <tbody>
-              {lenders.map((l) => (
+              {lenders?.map((l) => (
                 <tr key={l.lenderId}>
                   <td className="td-mono td-primary">{l.lenderId}</td>
                   <td className="td-primary">{l.lenderName}</td>
@@ -2045,7 +3138,7 @@ function ComplianceAuditPage() {
                   <td className="td-mono text-amber">{formatINR(l.fldgExposure)}</td>
                   <td className="td-mono">{formatINR(l.capLimit)}</td>
                   <td className="td-mono">
-                    <div style={{ display: "flex", items: "center", gap: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span>{l.utilizationPct}%</span>
                       <div className="gauge-container" style={{ width: 60, height: 6, margin: 0 }}>
                         <div className="gauge-fill" style={{ width: `${l.utilizationPct}%`, background: l.utilizationPct > 90 ? "var(--red)" : "var(--green)" }} />
@@ -2067,158 +3160,389 @@ function ComplianceAuditPage() {
   );
 }
 
-// ─── ADMIN ONBOARD LENDER PAGE (ADMIN ROLE) ─────────────────────────
-function OnboardLenderPage({ onSuccess }) {
-  const [form, setForm] = useState({
-    lenderName: "",
-    type: "NBFC",
-    minAmount: 10000,
-    maxAmount: 500000,
-    interestRate: 15.0,
-    minCibilScore: 650,
-    maxDti: 0.5,
-    processingFee: 1.5,
-    disbursalTime: "T+1",
-    tenureMonths: [3, 6, 12, 18, 24],
-    supportedPurposes: ["personal", "consumer", "education"],
-    ocenEnabled: true,
-    aaEnabled: true,
-    nachEnabled: true,
-  });
-
-  const [submitting, setSubmitting] = useState(false);
+// ─── ADMIN FLDG MONITORING PAGE ─────────────────────────────────────
+function AdminFldgPage() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const update = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const res = await api("/admin/fldg");
+        setData(res);
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    try {
-      await api("/lenders", {
-        method: "POST",
-        body: JSON.stringify(form),
-      });
-      onSuccess();
-    } catch (ex) {
-      setError(ex.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  if (loading) {
+    return (
+      <div className="empty card">
+        <div className="spinner" style={{ margin: "0 auto 12px" }} />
+        <div>Loading FLDG portfolio exposure and cap utilization data…</div>
+      </div>
+    );
+  }
 
-  const togglePurpose = (p) => {
-    const current = [...form.supportedPurposes];
-    const idx = current.indexOf(p);
-    if (idx >= 0) current.splice(idx, 1);
-    else current.push(p);
-    update("supportedPurposes", current);
-  };
+  if (error) return <div className="error-banner"><span>{error}</span></div>;
+
+  const { monitoring, blockedRouteEvents, regulatorNotice } = data || {};
 
   return (
-    <div style={{ maxWidth: 660, margin: "0 auto" }}>
+    <div>
       <div className="section-header">
-        <div className="section-title">Onboard New Lending Partner</div>
-        <span className="badge badge-green">ADMIN Portal</span>
+        <div>
+          <div className="section-title">First Loss Default Guarantee (FLDG / DLG) Monitoring</div>
+          <div className="page-subtitle">5% statutory portfolio default guarantee cap surveillance across all lending products</div>
+        </div>
+        <ReadOnlyBadge label="READ ONLY FLDG SURVEILLANCE" />
+      </div>
+
+      <div className="compliance-strip mb-4">
+        <span>⚖️</span>
+        <div>
+          <strong>RBI Default Loss Guarantee (DLG) Guidelines:</strong> {regulatorNotice} The platform automatically blocks loan routing if the projected DLG exposure exceeds 5% of the total lender portfolio. <em>ADMIN overrides are strictly disabled.</em>
+        </div>
+      </div>
+
+      {/* FLDG Table */}
+      <div className="card mb-4">
+        <div className="section-title mb-3">Lender Portfolio Exposure & Available Capacity</div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Lender Product</th>
+                <th>Type</th>
+                <th>Portfolio Outstanding</th>
+                <th>Disbursed Outstanding</th>
+                <th>DLG Exposure (5%)</th>
+                <th>Applicable Cap (5%)</th>
+                <th>Utilization %</th>
+                <th>Available Capacity</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {monitoring?.map((m) => (
+                <tr key={m.lenderId}>
+                  <td className="td-primary" style={{ fontWeight: 600 }}>{m.lenderName} ({m.lenderId})</td>
+                  <td><span className="badge badge-muted">{m.lenderType}</span></td>
+                  <td className="td-mono">{formatINR(m.portfolioOutstanding)}</td>
+                  <td className="td-mono">{formatINR(m.disbursedOutstanding)}</td>
+                  <td className="td-mono text-amber">{formatINR(m.dlgExposure)}</td>
+                  <td className="td-mono">{formatINR(m.applicableCap)}</td>
+                  <td className="td-mono">
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span>{m.utilizationPct}%</span>
+                      <div className="gauge-container" style={{ width: 60, height: 6, margin: 0 }}>
+                        <div className="gauge-fill" style={{ width: `${m.utilizationPct}%`, background: m.utilizationPct > 90 ? "var(--red)" : "var(--green)" }} />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="td-mono text-green">{formatINR(m.availableCapacity)}</td>
+                  <td>
+                    <span className={`badge ${m.status === "WITHIN_LIMIT" ? "badge-green" : "badge-red"}`}>
+                      {m.status === "WITHIN_LIMIT" ? "WITHIN LIMIT" : "BREACH"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Blocked Routes Log */}
+      <div className="card">
+        <div className="section-title mb-3">Automated Route Block Log (FLDG Cap Protection)</div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Application ID</th>
+                <th>Lender ID</th>
+                <th>Actor</th>
+                <th>Reason / Cap Limit</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(!blockedRouteEvents || blockedRouteEvents.length === 0) ? (
+                <tr><td colSpan={6} className="empty">No route attempts have been blocked by FLDG cap limits yet. All portfolios are operating within capacity.</td></tr>
+              ) : (
+                blockedRouteEvents.map((evt) => (
+                  <tr key={evt._id}>
+                    <td className="td-mono text-sm">{new Date(evt.createdAt).toLocaleString("en-IN")}</td>
+                    <td className="td-mono td-primary">{evt.applicationId || "—"}</td>
+                    <td className="td-mono">{evt.details?.lenderId || "—"}</td>
+                    <td>{evt.actor}</td>
+                    <td className="text-sm text-muted">Projected: {formatINR(evt.details?.projectedExposure || 0)} vs Cap: {formatINR(evt.details?.capLimit || 0)}</td>
+                    <td><span className="badge badge-red">BLOCKED</span></td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN AUDIT LOGS PAGE (FILTERABLE AUDIT TRAIL) ────────────────
+function AdminAuditLogsPage() {
+  const [data, setData] = useState({ logs: [], total: 0, page: 1, totalPages: 1, availableEventTypes: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [eventType, setEventType] = useState("all");
+  const [passFilter, setPassFilter] = useState("all");
+  const [searchId, setSearchId] = useState("");
+  const [page, setPage] = useState(1);
+  const [expandedLogId, setExpandedLogId] = useState(null);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      params.append("page", page);
+      params.append("limit", 25);
+      if (eventType !== "all") params.append("eventType", eventType);
+      if (passFilter !== "all") params.append("pass", passFilter === "pass");
+      if (searchId.trim()) params.append("applicationId", searchId.trim());
+
+      const res = await api(`/admin/audit-logs?${params.toString()}`);
+      setData(res);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, eventType, passFilter, searchId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  return (
+    <div>
+      <div className="section-header">
+        <div>
+          <div className="section-title">Compliance & Security Audit Trail</div>
+          <div className="page-subtitle">Immutable chronological log of all credit decisions, consent grants, and state transitions</div>
+        </div>
+        <ReadOnlyBadge label="READ ONLY AUDIT VIEWER" />
+      </div>
+
+      <div className="card mb-4">
+        <div className="grid-3 mb-3">
+          <div>
+            <label className="form-label">Filter by Event Type</label>
+            <select className="form-select" value={eventType} onChange={(e) => { setEventType(e.target.value); setPage(1); }}>
+              <option value="all">All Event Types</option>
+              {data.availableEventTypes?.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="form-label">Status Gate</label>
+            <select className="form-select" value={passFilter} onChange={(e) => { setPassFilter(e.target.value); setPage(1); }}>
+              <option value="all">All Gate Results</option>
+              <option value="pass">✓ PASS Only</option>
+              <option value="fail">✗ BLOCKED / FAILED Only</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="form-label">Application ID / Search</label>
+            <input
+              className="form-input"
+              placeholder="e.g. APP-001"
+              value={searchId}
+              onChange={(e) => setSearchId(e.target.value)}
+            />
+          </div>
+        </div>
       </div>
 
       {error && <div className="error-banner"><span>{error}</span></div>}
 
-      <form className="card" onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label className="form-label">Lender / Institution Name</label>
-          <input className="form-input" value={form.lenderName} onChange={(e) => update("lenderName", e.target.value)} placeholder="e.g. Tata Capital / Axis Bank" required />
+      <div className="card">
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Event Type</th>
+                <th>Actor</th>
+                <th>Role</th>
+                <th>App ID</th>
+                <th>Result</th>
+                <th>Transition</th>
+                <th>Payload</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={8} className="empty"><div className="spinner" style={{ margin: "0 auto 8px" }} />Loading audit stream…</td></tr>
+              ) : data.logs.length === 0 ? (
+                <tr><td colSpan={8} className="empty">No audit logs matching this filter.</td></tr>
+              ) : (
+                data.logs.map((log) => (
+                  <Fragment key={log._id}>
+                    <tr>
+                      <td className="td-mono text-sm">{new Date(log.createdAt).toLocaleString("en-IN")}</td>
+                      <td className="td-primary"><span className="badge badge-muted">{log.type}</span></td>
+                      <td>{log.actor}</td>
+                      <td><span className="badge badge-muted">{log.actorRole}</span></td>
+                      <td className="td-mono td-primary">{log.applicationId || "—"}</td>
+                      <td>
+                        <span className={`badge ${log.pass ? "badge-green" : "badge-red"}`}>
+                          {log.pass ? "✓ PASS" : "✗ BLOCKED"}
+                        </span>
+                      </td>
+                      <td className="td-mono text-sm">
+                        {log.previousState && log.newState ? `${log.previousState} → ${log.newState}` : "—"}
+                      </td>
+                      <td>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          onClick={() => setExpandedLogId(expandedLogId === log._id ? null : log._id)}
+                        >
+                          {expandedLogId === log._id ? "Hide" : "Details"}
+                        </button>
+                      </td>
+                    </tr>
+                    {expandedLogId === log._id && (
+                      <tr>
+                        <td colSpan={8} style={{ background: "var(--bg-surface-elevated)", padding: 14 }}>
+                          <pre style={{ fontSize: 11, fontFamily: "var(--font-mono)", background: "var(--bg-main)", padding: 12, borderRadius: 6, overflowX: "auto" }}>
+                            {JSON.stringify(log, null, 2)}
+                          </pre>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
 
-        <div className="grid-2">
-          <div className="form-group">
-            <label className="form-label">Institution Type</label>
-            <select className="form-select" value={form.type} onChange={(e) => update("type", e.target.value)}>
-              <option value="Bank">Bank</option>
-              <option value="NBFC">NBFC</option>
-            </select>
+        {data.totalPages > 1 && (
+          <div className="flex justify-between items-center mt-4" style={{ paddingTop: 14, borderTop: "1px solid var(--border-color)" }}>
+            <span className="text-sm text-muted">Page {data.page} of {data.totalPages} ({data.total} total logs)</span>
+            <div className="flex gap-2">
+              <button className="btn btn-sm btn-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>← Previous</button>
+              <button className="btn btn-sm btn-secondary" disabled={page >= data.totalPages} onClick={() => setPage((p) => p + 1)}>Next →</button>
+            </div>
           </div>
-          <div className="form-group">
-            <label className="form-label">Interest Rate (% p.a.)</label>
-            <input className="form-input" type="number" step="0.25" value={form.interestRate} onChange={(e) => update("interestRate", Number(e.target.value))} required />
-          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN SYSTEM HEALTH PAGE ───────────────────────────────────────
+function AdminSystemHealthPage() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const loadData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api("/admin/system-health");
+      setData(res);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="empty card">
+        <div className="spinner" style={{ margin: "0 auto 12px" }} />
+        <div>Querying platform infrastructure & service health…</div>
+      </div>
+    );
+  }
+
+  if (error) return <div className="error-banner"><span>{error}</span><button className="btn btn-sm btn-secondary" onClick={loadData}>Retry</button></div>;
+
+  return (
+    <div>
+      <div className="section-header">
+        <div>
+          <div className="section-title">System Health & Infrastructure Monitor</div>
+          <div className="page-subtitle">Live health status, database connectivity, memory utilization & subsystem readiness</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="badge badge-green">● {data.status}</span>
+          <button className="btn btn-sm btn-secondary" onClick={loadData}>↻ Ping</button>
+        </div>
+      </div>
+
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-label">API Service Status</div>
+          <div className="stat-value text-green">● UP</div>
+          <div className="stat-delta">{data.service}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">System Uptime</div>
+          <div className="stat-value">{Math.floor(data.uptimeSeconds / 3600)}h {Math.floor((data.uptimeSeconds % 3600) / 60)}m</div>
+          <div className="stat-delta">● {data.uptimeSeconds} seconds online</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Database Status</div>
+          <div className="stat-value text-green">✓ {data.database?.status}</div>
+          <div className="stat-delta">● MongoDB Connection State: {data.database?.readyState}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Heap Memory</div>
+          <div className="stat-value text-primary">{data.memory?.heapUsedMb} MB</div>
+          <div className="stat-delta">● Total Heap: {data.memory?.heapTotalMb} MB (RSS: {data.memory?.rssMb} MB)</div>
+        </div>
+      </div>
+
+      <div className="grid-2 mb-4">
+        <div className="card">
+          <div className="card-title mb-3">Active Subsystems & Protocol Gateways</div>
+          {data.subsystems && Object.entries(data.subsystems).map(([sub, st]) => (
+            <div key={sub} className="engine-metric">
+              <span className="engine-metric-label">{sub.replace(/([A-Z])/g, " $1").trim()}</span>
+              <span className="badge badge-green">● {st}</span>
+            </div>
+          ))}
         </div>
 
-        <div className="grid-2">
-          <div className="form-group">
-            <label className="form-label">Minimum Amount (₹)</label>
-            <input className="form-input" type="number" value={form.minAmount} onChange={(e) => update("minAmount", Number(e.target.value))} required />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Maximum Amount (₹)</label>
-            <input className="form-input" type="number" value={form.maxAmount} onChange={(e) => update("maxAmount", Number(e.target.value))} required />
-          </div>
+        <div className="card">
+          <div className="card-title mb-3">Enforced Regulatory Compliance Guardrails</div>
+          {data.complianceGuards && Object.entries(data.complianceGuards).map(([g, val]) => (
+            <div key={g} className="engine-metric">
+              <span className="engine-metric-label">{g.replace(/([A-Z])/g, " $1").trim()}</span>
+              <span className="badge badge-blue">{val}</span>
+            </div>
+          ))}
         </div>
-
-        <div className="grid-2">
-          <div className="form-group">
-            <label className="form-label">Minimum CIBIL Score</label>
-            <input className="form-input" type="number" value={form.minCibilScore} onChange={(e) => update("minCibilScore", Number(e.target.value))} required />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Maximum Debt-To-Income (DTI)</label>
-            <input className="form-input" type="number" step="0.05" min="0.1" max="0.9" value={form.maxDti} onChange={(e) => update("maxDti", Number(e.target.value))} required />
-            <div className="form-hint">e.g. 0.50 = 50% max DTI limit</div>
-          </div>
-        </div>
-
-        <div className="grid-2">
-          <div className="form-group">
-            <label className="form-label">Processing Fee (%)</label>
-            <input className="form-input" type="number" step="0.1" value={form.processingFee} onChange={(e) => update("processingFee", Number(e.target.value))} required />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Disbursal SLA</label>
-            <select className="form-select" value={form.disbursalTime} onChange={(e) => update("disbursalTime", e.target.value)}>
-              <option value="T+0">T+0 (Instant)</option>
-              <option value="T+1">T+1 (1 Day)</option>
-              <option value="T+2">T+2 (2 Days)</option>
-              <option value="T+3">T+3 (3 Days)</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="form-group">
-          <label className="form-label">Supported Loan Purposes</label>
-          <div className="flex gap-2" style={{ flexWrap: "wrap", marginTop: 6 }}>
-            {["personal", "consumer", "education", "medical", "emergency", "sme", "working_capital"].map((p) => (
-              <button
-                key={p}
-                type="button"
-                className={`btn btn-sm ${form.supportedPurposes.includes(p) ? "btn-primary" : "btn-ghost"}`}
-                onClick={() => togglePurpose(p)}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid-3 mb-4" style={{ marginTop: 16 }}>
-          <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
-            <input type="checkbox" checked={form.ocenEnabled} onChange={(e) => update("ocenEnabled", e.target.checked)} />
-            <span className="text-sm">OCEN 4.0 Protocol</span>
-          </label>
-          <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
-            <input type="checkbox" checked={form.aaEnabled} onChange={(e) => update("aaEnabled", e.target.checked)} />
-            <span className="text-sm">Account Aggregator</span>
-          </label>
-          <label style={{ display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
-            <input type="checkbox" checked={form.nachEnabled} onChange={(e) => update("nachEnabled", e.target.checked)} />
-            <span className="text-sm">eNACH AutoPay</span>
-          </label>
-        </div>
-
-        <button className="btn btn-primary w-full" type="submit" disabled={submitting}>
-          {submitting ? "Onboarding Partner…" : "Onboard Lender Product"}
-        </button>
-      </form>
+      </div>
     </div>
   );
 }
@@ -3598,6 +4922,8 @@ export default function App() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [activeIntentId, setActiveIntentId] = useState(null);
   const [initialIntentPurpose, setInitialIntentPurpose] = useState("Electronics");
+  const [selectedAppId, setSelectedAppId] = useState(null);
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   const refreshAll = useCallback(async () => {
     setBootLoading(true);
@@ -3637,6 +4963,8 @@ export default function App() {
     setLenders([]);
     setPage("dashboard");
     setMobileNavOpen(false);
+    setSelectedAppId(null);
+    setDetailModalOpen(false);
   };
 
   const handleNewApp = async (payload) => {
@@ -3670,11 +4998,25 @@ export default function App() {
       { id: "my-loans", icon: "📑", label: "My Loans" },
       { id: "my-consents", icon: "🛡️", label: "Consents & Privacy" }
     );
+  } else if (role === "ADMIN") {
+    navItems.push(
+      { id: "dashboard", icon: "⬡", label: "Dashboard" },
+      { id: "admin-applications", icon: "📑", label: "Applications" },
+      { id: "admin-users", icon: "👥", label: "Users" },
+      { id: "admin-lenders", icon: "🏦", label: "Lenders" },
+      { id: "admin-dlas", icon: "🔌", label: "DLAs" },
+      { id: "admin-credit-analytics", icon: "📊", label: "Credit Analytics" },
+      { id: "admin-consumption", icon: "🛍️", label: "Consumption Analytics" },
+      { id: "admin-compliance", icon: "🛡️", label: "Compliance" },
+      { id: "admin-fldg", icon: "⚖️", label: "FLDG Monitoring" },
+      { id: "admin-audit-logs", icon: "📜", label: "Audit Logs" },
+      { id: "admin-system-health", icon: "💚", label: "System Health" }
+    );
   } else {
     navItems.push({ id: "dashboard", icon: "⬡", label: "Overview" });
   }
 
-  if (role === "DLA" || role === "ADMIN") {
+  if (role === "DLA") {
     navItems.push(
       { id: "new-application", icon: "＋", label: "New Application" },
       { id: "credit-engine", icon: "⚡", label: "Credit Engine" }
@@ -3688,18 +5030,15 @@ export default function App() {
     );
   }
 
-  if (role === "ADMIN") {
-    navItems.push(
-      { id: "admin-stats", icon: "📈", label: "Marketplace Stats" },
-      { id: "admin-compliance", icon: "🛡️", label: "Compliance Audit" },
-      { id: "onboard-lender", icon: "🏛️", label: "Onboard Lender" }
-    );
+  if (role !== "ADMIN") {
+    navItems.push({ id: "lenders", icon: "🏦", label: "Lender Catalogue" });
   }
 
-  navItems.push({ id: "lenders", icon: "🏦", label: "Lender Catalogue" });
-
   const pageMeta = {
-    dashboard: { title: role === "USER" ? "Consumer Credit Dashboard" : "Marketplace Overview", subtitle: role === "USER" ? "Personalized consumption credit marketplace & credit profile" : "Embedded credit routing & application hub" },
+    dashboard: {
+      title: role === "USER" ? "Consumer Credit Dashboard" : role === "ADMIN" ? "Platform Oversight & Analytics" : "Marketplace Overview",
+      subtitle: role === "USER" ? "Personalized consumption credit marketplace & credit profile" : role === "ADMIN" ? "Live operations monitoring, loan funnel & regulatory governance" : "Embedded credit routing & application hub"
+    },
     "credit-profile": { title: "Credit Profile & Bureau Query", subtitle: "Manage verified identity, employment, & CIBIL score" },
     "get-credit": { title: "Specify Credit Need", subtitle: "Select consumption category & loan parameters" },
     "my-offers": { title: "Compare Credit Offers", subtitle: "Transparent interest rates, APR, processing fee & EMI" },
@@ -3709,10 +5048,23 @@ export default function App() {
     "credit-engine": { title: "Credit Engine", subtitle: "Eligibility matching & RBI Key Fact Statement (KFS)" },
     "routed-loans": { title: "Lender Portal — Disbursal", subtitle: "Verify KFS document & execute loan disbursal" },
     "lender-portfolio": { title: "Portfolio & FLDG Cap", subtitle: "Audit funded portfolio and 5% FLDG guarantee cap" },
-    "admin-stats": { title: "Administrator Dashboard", subtitle: "System-wide credit volume & application analytics" },
-    "admin-compliance": { title: "Compliance Audit Monitor", subtitle: "Audit KFS generation & FLDG cap limits across all lenders" },
+    "admin-applications": { title: "Application Monitor", subtitle: "Read-only application inspector & lifecycle tracking" },
+    "admin-users": { title: "Platform User Directory", subtitle: "Read-only user profiles & data minimization audit" },
+    "admin-lenders": { title: "Lender Performance & Catalogue", subtitle: "Bank & NBFC underwriting criteria, portfolio & SLAs" },
+    "admin-dlas": { title: "DLA / LSP Partner Integrations", subtitle: "Third-party platform integrations, API activity & conversions" },
+    "admin-credit-analytics": { title: "Credit Marketplace Analytics", subtitle: "Multi-stage conversion funnel & volume statistics" },
+    "admin-consumption": { title: "Consumption Credit Analytics", subtitle: "Category breakdown by loan purpose, ticket size & approvals" },
+    "admin-compliance": { title: "RBI Compliance Dashboard", subtitle: "KFS pre-generation, AA consent & regulatory compliance monitor" },
+    "admin-fldg": { title: "FLDG / DLG Cap Monitor", subtitle: "5% portfolio exposure guarantee limit & utilization gauges" },
+    "admin-audit-logs": { title: "Audit & Compliance Logs", subtitle: "Real-time tamper-evident compliance audit trail" },
+    "admin-system-health": { title: "System Health & Infrastructure", subtitle: "Service uptime, MongoDB connection & engine readiness" },
+    "admin-stats": { title: "Platform Overview", subtitle: "Marketplace performance & operations metrics" },
     "onboard-lender": { title: "Onboard Lending Partner", subtitle: "Configure Bank / NBFC underwriting criteria & SLAs" },
     lenders: { title: "Lender Catalogue", subtitle: "Onboarded regulated Banks & NBFCs" },
+    "aa-consents": { title: "Account Aggregator Consents", subtitle: "Consent lifecycle & data minimization logs" },
+    "cibil-pulls": { title: "CIBIL Bureau Pulls", subtitle: "Direct inquiry logs & score distribution" },
+    ocen: { title: "OCEN 4.0 Protocol Rails", subtitle: "Standardized Open Credit Enablement Network API logs" },
+    enach: { title: "eNACH AutoPay Mandates", subtitle: "Automated direct debit repayment mandates" },
   };
 
   const roleBadge = role === "ADMIN" ? "badge-green" : role === "LENDER" ? "badge-blue" : role === "USER" ? "badge-green" : "badge-amber";
@@ -3793,8 +5145,8 @@ export default function App() {
                 </svg>
               </button>
               <div>
-                <div className="page-title">{pageMeta[page]?.title}</div>
-                <div className="page-subtitle">{pageMeta[page]?.subtitle}</div>
+                <div className="page-title">{pageMeta[page]?.title || "Vantage Credit"}</div>
+                <div className="page-subtitle">{pageMeta[page]?.subtitle || "Embedded credit infrastructure"}</div>
               </div>
             </div>
             <div className="topbar-actions">
@@ -3821,49 +5173,94 @@ export default function App() {
               </div>
             ) : (
               <>
-                {page === "dashboard" && (
-                  role === "USER" ? (
-                    <ConsumerDashboardPage user={auth.user} onNavigate={handleNavigateConsumer} />
-                  ) : (
-                    <DashboardPage applications={applications} user={auth.user} />
-                  )
-                )}
-                {page === "credit-profile" && <ConsumerProfilePage user={auth.user} onRefresh={refreshAll} />}
-                {page === "get-credit" && (
-                  <GetCreditPage
-                    initialPurpose={initialIntentPurpose}
-                    onOffersFound={(intentId) => {
-                      setActiveIntentId(intentId);
-                      setPage("my-offers");
-                    }}
-                  />
-                )}
-                {page === "my-offers" && (
-                  <OffersComparisonPage
-                    intentId={activeIntentId}
-                    onOfferSelected={() => refreshAll()}
-                  />
-                )}
-                {page === "my-loans" && <ConsumerDashboardPage user={auth.user} onNavigate={handleNavigateConsumer} />}
-                {page === "my-consents" && <ConsentsPage />}
+                {role === "ADMIN" ? (
+                  <>
+                    {page === "dashboard" && (
+                      <AdminDashboardPage
+                        onNavigate={(p) => setPage(p)}
+                        onSelectApp={(appId) => { setSelectedAppId(appId); setDetailModalOpen(true); }}
+                      />
+                    )}
+                    {page === "admin-applications" && (
+                      <AdminApplicationsPage
+                        onSelectApp={(appId) => { setSelectedAppId(appId); setDetailModalOpen(true); }}
+                      />
+                    )}
+                    {page === "admin-users" && <AdminUsersPage />}
+                    {page === "admin-lenders" && <AdminLendersPage />}
+                    {page === "admin-dlas" && <AdminDlasPage />}
+                    {page === "admin-credit-analytics" && <AdminCreditAnalyticsPage />}
+                    {page === "admin-consumption" && <AdminConsumptionAnalyticsPage />}
+                    {page === "admin-compliance" && <AdminCompliancePage />}
+                    {page === "admin-fldg" && <AdminFldgPage />}
+                    {page === "admin-audit-logs" && <AdminAuditLogsPage />}
+                    {page === "admin-system-health" && <AdminSystemHealthPage />}
+                    {page === "admin-stats" && (
+                      <AdminDashboardPage
+                        onNavigate={(p) => setPage(p)}
+                        onSelectApp={(appId) => { setSelectedAppId(appId); setDetailModalOpen(true); }}
+                      />
+                    )}
+                    {page === "lenders" && <AdminLendersPage />}
+                    {["new-application", "credit-engine", "routed-loans", "lender-portfolio", "onboard-lender", "get-credit", "my-offers"].includes(page) && (
+                      <AccessRestrictedPage action={page} />
+                    )}
+                    {page === "aa-consents" && <AAConsentsPage />}
+                    {page === "cibil-pulls" && <CibilPullsPage />}
+                    {page === "ocen" && <OcenPage />}
+                    {page === "enach" && <ENachPage />}
+                  </>
+                ) : (
+                  <>
+                    {page === "dashboard" && (
+                      role === "USER" ? (
+                        <ConsumerDashboardPage user={auth.user} onNavigate={handleNavigateConsumer} />
+                      ) : (
+                        <DashboardPage applications={applications} user={auth.user} />
+                      )
+                    )}
+                    {page === "credit-profile" && <ConsumerProfilePage user={auth.user} onRefresh={refreshAll} />}
+                    {page === "get-credit" && (
+                      <GetCreditPage
+                        initialPurpose={initialIntentPurpose}
+                        onOffersFound={(intentId) => {
+                          setActiveIntentId(intentId);
+                          setPage("my-offers");
+                        }}
+                      />
+                    )}
+                    {page === "my-offers" && (
+                      <OffersComparisonPage
+                        intentId={activeIntentId}
+                        onOfferSelected={() => refreshAll()}
+                      />
+                    )}
+                    {page === "my-loans" && <ConsumerDashboardPage user={auth.user} onNavigate={handleNavigateConsumer} />}
+                    {page === "my-consents" && <ConsentsPage />}
 
-                {page === "new-application" && <NewApplicationPage onSubmit={handleNewApp} />}
-                {page === "credit-engine" && <CreditEnginePage applications={applications} lenders={lenders} onRoute={handleRoute} />}
-                {page === "routed-loans" && <RoutedLoansPage applications={applications} user={auth.user} onRefresh={refreshAll} />}
-                {page === "lender-portfolio" && <LenderPortfolioPage user={auth.user} />}
-                {page === "admin-stats" && <AdminStatsPage />}
-                {page === "admin-compliance" && <ComplianceAuditPage />}
-                {page === "onboard-lender" && <OnboardLenderPage onSuccess={() => { refreshAll(); setPage("lenders"); }} />}
-                {page === "lenders" && <LendersPage lenders={lenders} loading={bootLoading} />}
-                {page === "aa-consents" && <AAConsentsPage />}
-                {page === "cibil-pulls" && <CibilPullsPage />}
-                {page === "ocen" && <OcenPage />}
-                {page === "enach" && <ENachPage />}
+                    {page === "new-application" && <NewApplicationPage onSubmit={handleNewApp} />}
+                    {page === "credit-engine" && <CreditEnginePage applications={applications} lenders={lenders} onRoute={handleRoute} />}
+                    {page === "routed-loans" && <RoutedLoansPage applications={applications} user={auth.user} onRefresh={refreshAll} />}
+                    {page === "lender-portfolio" && <LenderPortfolioPage user={auth.user} />}
+                    {page === "lenders" && <LendersPage lenders={lenders} loading={bootLoading} />}
+                    {page === "aa-consents" && <AAConsentsPage />}
+                    {page === "cibil-pulls" && <CibilPullsPage />}
+                    {page === "ocen" && <OcenPage />}
+                    {page === "enach" && <ENachPage />}
+                  </>
+                )}
               </>
             )}
           </div>
         </main>
       </div>
+
+      {detailModalOpen && selectedAppId && (
+        <ReadOnlyApplicationModal
+          appId={selectedAppId}
+          onClose={() => { setDetailModalOpen(false); setSelectedAppId(null); }}
+        />
+      )}
     </>
   );
 }

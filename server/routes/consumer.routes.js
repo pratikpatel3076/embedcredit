@@ -7,7 +7,7 @@ const LoanOffer = require("../models/LoanOffer");
 const LoanApplication = require("../models/LoanApplication");
 const LenderProduct = require("../models/LenderProduct");
 const ApplicationRoute = require("../models/ApplicationRoute");
-const { authenticate } = require("../middleware/auth");
+const { authenticate, requireRole } = require("../middleware/auth");
 const asyncHandler = require("../utils/asyncHandler");
 const { nextIntentId, nextOfferId, nextApplicationId, nextConsentId } = require("../utils/idGenerator");
 const { matchMarketplaceOffers } = require("../services/creditEngine");
@@ -33,6 +33,7 @@ router.get(
 router.put(
   "/profile",
   authenticate,
+  requireRole("USER"),
   asyncHandler(async (req, res) => {
     const user = await User.findById(req.user.sub);
     if (!user) return res.status(404).json({ error: "User not found" });
@@ -99,6 +100,7 @@ router.get(
 router.post(
   "/credit-profile/bureau-pull",
   authenticate,
+  requireRole("USER"),
   asyncHandler(async (req, res) => {
     const user = await User.findById(req.user.sub);
     const userIdKey = user?.userId || req.user.sub;
@@ -158,6 +160,7 @@ router.get(
 router.post(
   "/consents",
   authenticate,
+  requireRole("USER"),
   asyncHandler(async (req, res) => {
     const user = await User.findById(req.user.sub);
     const userIdKey = user?.userId || req.user.sub;
@@ -195,6 +198,7 @@ router.post(
 router.post(
   "/loan-intents",
   authenticate,
+  requireRole("USER"),
   asyncHandler(async (req, res) => {
     const user = await User.findById(req.user.sub);
     const userIdKey = user?.userId || req.user.sub;
@@ -238,6 +242,7 @@ router.get(
 router.post(
   "/loan-intents/:id/find-offers",
   authenticate,
+  requireRole("USER"),
   asyncHandler(async (req, res) => {
     const intent = await LoanIntent.findOne({ id: req.params.id });
     if (!intent) return res.status(404).json({ error: "Loan intent not found" });
@@ -315,6 +320,7 @@ router.get(
 router.post(
   "/offers/:id/select",
   authenticate,
+  requireRole("USER"),
   asyncHandler(async (req, res) => {
     const offer = await LoanOffer.findOne({ id: req.params.id });
     if (!offer) return res.status(404).json({ error: "Offer not found" });

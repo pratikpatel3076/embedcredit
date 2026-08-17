@@ -9,6 +9,8 @@ const LoanIntent = require("./models/LoanIntent");
 const LoanOffer = require("./models/LoanOffer");
 const DLA = require("./models/DLA");
 const DLGPortfolio = require("./models/DLGPortfolio");
+const User = require("./models/User");
+const bcrypt = require("bcryptjs");
 const { runCreditEngine } = require("./services/creditEngine");
 const { generateKFS } = require("./services/kfsGenerator");
 const aaService = require("./services/aaService");
@@ -331,6 +333,81 @@ async function seedConsumerData() {
   console.log("[seed] seeded consumer credit profile, DLA partner, DLG portfolios, consent, intent, and offers");
 }
 
+async function seedUsers() {
+  const users = [
+    {
+      username: "admin",
+      password: "Admin@123",
+      role: "ADMIN",
+      fullName: "Platform Operations Monitor",
+      email: "admin@vantagecredit.in",
+      mobile: "9988776655",
+      pan: "ABCDE1234F",
+      kycStatus: "VERIFIED",
+    },
+    {
+      username: "dla1",
+      password: "Dla@123",
+      role: "DLA",
+      dlaId: "DLA-001",
+      fullName: "Vantage DLA Operator",
+      email: "dla@vantagecredit.in",
+      mobile: "9876543200",
+      pan: "DLAXX1234D",
+      kycStatus: "VERIFIED",
+    },
+    {
+      username: "lender1",
+      password: "Lender@123",
+      role: "LENDER",
+      lenderId: "L001",
+      fullName: "CreditSaison Underwriter",
+      email: "underwriting@creditsaison.in",
+      mobile: "9876543201",
+      pan: "LNDXX1234L",
+      kycStatus: "VERIFIED",
+    },
+    {
+      username: "user1",
+      password: "User@123",
+      role: "USER",
+      userId: "USR-001",
+      fullName: "Rahul Sharma",
+      email: "rahul.sharma@example.com",
+      mobile: "9876543210",
+      pan: "ABCPS1234D",
+      monthlyIncome: 75000,
+      monthlyObligations: 15000,
+      profileCompletion: 85,
+      kycStatus: "VERIFIED",
+    },
+  ];
+
+  for (const u of users) {
+    const existing = await User.findOne({ username: u.username });
+    if (!existing) {
+      const passwordHash = await bcrypt.hash(u.password, 10);
+      await User.create({
+        username: u.username,
+        passwordHash,
+        role: u.role,
+        dlaId: u.dlaId || null,
+        lenderId: u.lenderId || null,
+        userId: u.userId || null,
+        fullName: u.fullName,
+        email: u.email,
+        mobile: u.mobile,
+        pan: u.pan,
+        monthlyIncome: u.monthlyIncome || 0,
+        monthlyObligations: u.monthlyObligations || 0,
+        profileCompletion: u.profileCompletion || 100,
+        kycStatus: u.kycStatus || "VERIFIED",
+      });
+    }
+  }
+  console.log("[seed] seeded default platform role users");
+}
+
 async function seedDatabase(force = false) {
   if (force) {
     await Promise.all([
@@ -348,6 +425,7 @@ async function seedDatabase(force = false) {
     ]);
     console.log("[seed] force reseed — cleared collections");
   }
+  await seedUsers();
   await seedLenders();
   await seedApplicationsAndRoutes();
   await seedConsumerData();

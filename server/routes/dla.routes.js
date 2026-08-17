@@ -12,12 +12,12 @@ const aaService = require("../services/aaService");
 
 const router = express.Router();
 
-// POST /api/applications  (DLA / ADMIN)
+// POST /api/applications  (DLA only)
 // DLA submission. aaConsent must be true (enforced in validateApplication).
 router.post(
   "/applications",
   authenticate,
-  requireRole("DLA", "ADMIN"),
+  requireRole("DLA"),
   validateApplication,
   asyncHandler(async (req, res) => {
     const b = req.body;
@@ -116,12 +116,12 @@ router.get(
   })
 );
 
-// POST /api/bureau/pull  (DLA / ADMIN)
+// POST /api/bureau/pull  (DLA only)
 // Body: { pan }  ->  mock CIBIL pull
 router.post(
   "/bureau/pull",
   authenticate,
-  requireRole("DLA", "ADMIN"),
+  requireRole("DLA"),
   asyncHandler(async (req, res) => {
     const pan = String((req.body || {}).pan || "").toUpperCase();
     if (!isPan(pan)) {
@@ -143,12 +143,12 @@ router.post(
   })
 );
 
-// POST /api/aa/consent  (DLA / ADMIN)
+// POST /api/aa/consent  (DLA only)
 // Logs AA consent with timestamp. Body: { pan }
 router.post(
   "/aa/consent",
   authenticate,
-  requireRole("DLA", "ADMIN"),
+  requireRole("DLA"),
   asyncHandler(async (req, res) => {
     const pan = String((req.body || {}).pan || "").toUpperCase();
     if (!isPan(pan)) {
@@ -164,12 +164,12 @@ router.post(
   })
 );
 
-// POST /api/aa/fetch  (DLA / ADMIN)
+// POST /api/aa/fetch  (DLA only)
 // Returns mock bank statement data. Body: { pan }
 router.post(
   "/aa/fetch",
   authenticate,
-  requireRole("DLA", "ADMIN"),
+  requireRole("DLA"),
   asyncHandler(async (req, res) => {
     const pan = String((req.body || {}).pan || "").toUpperCase();
     if (!isPan(pan)) {

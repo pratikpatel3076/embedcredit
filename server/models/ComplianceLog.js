@@ -26,6 +26,16 @@ const complianceLogSchema = new mongoose.Schema({
       "LOAN_DRAWDOWN_ACTIVATED",
       "LOAN_REPAYMENT_RECORDED",
       "LOAN_FORECLOSED",
+      // Consent Lifecycle Audit Types
+      "CONSENT_REQUESTED",
+      "CONSENT_GRANTED",
+      "CONSENT_REJECTED",
+      "CONSENT_REVOKED",
+      "CONSENT_EXPIRED",
+      "AA_DATA_FETCHED",
+      "AA_DATA_ACCESS_DENIED",
+      "PURPOSE_MISMATCH",
+      "UNAUTHORIZED_CONSENT_ACCESS",
       // Legacy compatibility
       "FLDG_CAP",
       "AA_CONSENT",

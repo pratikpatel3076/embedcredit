@@ -15,6 +15,7 @@ const { generateKFS } = require("../services/kfsGenerator");
 const { logCompliance } = require("../middleware/rbiCompliance");
 const bureauService = require("../services/bureauService");
 const aaService = require("../services/aaService");
+const consentService = require("../services/consent.service");
 
 const router = express.Router();
 
@@ -116,19 +117,16 @@ router.post(
     profile.bureauLastPulledAt = new Date();
     await profile.save();
 
-    const consentId = await nextConsentId();
-    const expDate = new Date();
-    expDate.setDate(expDate.getDate() + 30);
-
-    await ConsentRecord.create({
-      id: consentId,
+    await consentService.grantConsent({
       userId: userIdKey,
-      consentType: "BUREAU_PULL",
-      purpose: "Bureau credit score pull for loan eligibility matching",
+      consentType: "BUREAU_DATA",
+      purpose: "Credit bureau score pull and loan eligibility evaluation",
+      dataCategory: "CREDIT_HISTORY",
       provider: "CIBIL / TransUnion",
-      status: "ACTIVE",
-      grantedAt: new Date(),
-      expiresAt: expDate,
+      durationDays: 90,
+      source: "CONSUMER_PROFILE_BUREAU_PULL",
+      actor: user.username,
+      actorRole: "USER",
     });
 
     await logCompliance({
@@ -140,59 +138,122 @@ router.post(
       details: { cibilScore: pullResult.cibilScore },
     });
 
-    return res.json({ profile, bureauData: pullResult });
+    return res.json({ profile, bureauData: pullResult, bureauResult: pullResult });
   })
 );
 
-// GET /api/consents
+// GET /api/consents/definitions (Catalogue of purpose-specific consent templates)
+router.get(
+  "/consents/definitions",
+  authenticate,
+  (req, res) => {
+    return res.json(consentService.getConsentDefinitions());
+  }
+);
+
+// GET /api/consents/summary (Compact aggregated consent status for consumer dashboard)
+router.get(
+  "/consents/summary",
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user.sub);
+    const userIdKey = req.query?.userId || user?.userId || req.user.userId || (req.user.role === "USER" ? req.user.sub : "USR-001");
+    const summary = await consentService.getConsentSummary(userIdKey);
+    return res.json(summary);
+  })
+);
+
+// GET /api/consents (Role-scoped list of consent records)
 router.get(
   "/consents",
   authenticate,
   asyncHandler(async (req, res) => {
     const user = await User.findById(req.user.sub);
-    const userIdKey = user?.userId || req.user.sub;
-    const consents = await ConsentRecord.find({ userId: userIdKey }).sort({ createdAt: -1 });
+    const userIdKey = req.query?.userId || user?.userId || req.user.userId || (req.user.role === "USER" ? req.user.sub : "USR-001");
+    
+    let query = {};
+    if (req.user.role === "ADMIN" && !req.query.userId) {
+      query = {}; // Admin sees all consent audit records
+    } else {
+      query = { $or: [{ userId: userIdKey }, { userId: req.user.sub }] };
+    }
+
+    const consents = await ConsentRecord.find(query).sort({ createdAt: -1 });
     return res.json(consents);
   })
 );
 
-// POST /api/consents
+
+// POST /api/consents (Grant single purpose-specific consent)
 router.post(
   "/consents",
   authenticate,
-  requireRole("USER"),
   asyncHandler(async (req, res) => {
     const user = await User.findById(req.user.sub);
-    const userIdKey = user?.userId || req.user.sub;
-    const { consentType, purpose, provider } = req.body || {};
+    const userIdKey = req.body?.userId || user?.userId || (req.user.role === "USER" ? req.user.sub : "USR-001");
+    const { consentType, purpose, dataCategory, provider, durationDays, source, metadata } = req.body || {};
 
-    const consentId = await nextConsentId();
-    const expDate = new Date();
-    expDate.setFullYear(expDate.getFullYear() + 1);
-
-    const consent = await ConsentRecord.create({
-      id: consentId,
+    const consent = await consentService.grantConsent({
       userId: userIdKey,
-      consentType: consentType || "AA_DATA",
-      purpose: purpose || "Bank statement analysis and income verification",
-      provider: provider || "Account Aggregator Ecosystem",
-      status: "ACTIVE",
-      grantedAt: new Date(),
-      expiresAt: expDate,
+      consentType: consentType || "AA_FINANCIAL_DATA",
+      purpose,
+      dataCategory,
+      provider,
+      durationDays,
+      source: source || "CONSENT_CENTER",
+      metadata,
+      actor: user?.username || req.user.username || "SYSTEM",
+      actorRole: req.user.role || "USER",
     });
 
-    await logCompliance({
-      type: consentType === "AA_DATA" ? "AA_CONSENT_GRANTED" : "AA_CONSENT",
-      userId: userIdKey,
-      actor: user.username,
-      actorRole: "USER",
-      pass: true,
-      details: { consentId: consent.id, consentType: consent.consentType },
-    });
-
-    return res.status(201).json(consent);
+    return res.status(201).json({ success: true, consent, message: "Completed" });
   })
 );
+
+// POST /api/consents/batch (Grant or reject multiple explicit purpose consents)
+router.post(
+  "/consents/batch",
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user.sub);
+    const userIdKey = req.body?.userId || user?.userId || (req.user.role === "USER" ? req.user.sub : "USR-001");
+    const { consents = [], source = "CONSUMER_CONSENT_CENTER", applicationId } = req.body || {};
+
+    const results = await consentService.grantBatchConsents({
+      userId: userIdKey,
+      consents,
+      source,
+      applicationId,
+      actor: user?.username || req.user.username || "SYSTEM",
+      actorRole: req.user.role || "USER",
+    });
+
+    return res.status(201).json({ success: true, count: results.length, consents: results, message: "Completed" });
+  })
+);
+
+// POST /api/consents/:id/revoke (Revoke an active consent with audit trail)
+router.post(
+  "/consents/:id/revoke",
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user.sub);
+    const userIdKey = req.user.role === "ADMIN" ? null : (user?.userId || req.user.sub);
+    const { reason = "Revoked via Consent Center" } = req.body || {};
+
+    const revoked = await consentService.revokeConsent({
+      consentId: req.params.id,
+      userId: userIdKey,
+      reason,
+      actor: user?.username || req.user.username || "SYSTEM",
+      actorRole: req.user.role || "USER",
+    });
+
+    return res.json({ success: true, consent: revoked, message: "Completed" });
+  })
+);
+
+
 
 // POST /api/loan-intents
 router.post(

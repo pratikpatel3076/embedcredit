@@ -143,41 +143,151 @@ router.post(
   })
 );
 
-// POST /api/aa/consent  (DLA only)
-// Logs AA consent with timestamp. Body: { pan }
+const ConsentRecord = require("../models/ConsentRecord");
+const consentService = require("../services/consent.service");
+
+// POST /api/aa/consent  (DLA / Consumer)
+// Logs purpose-specific AA consent with timestamp. Body: { pan, purpose, dataCategory }
 router.post(
   "/aa/consent",
   authenticate,
-  requireRole("DLA"),
   asyncHandler(async (req, res) => {
     const pan = String((req.body || {}).pan || "").toUpperCase();
     if (!isPan(pan)) {
       return res.status(400).json({ error: "Invalid PAN format" });
     }
-    const consent = aaService.logConsent({ pan, consentAt: new Date() });
+
+    const { purpose = "Credit assessment and bank statement analysis", dataCategory = "FINANCIAL_DATA" } = req.body || {};
+    const consent = aaService.logConsent({ pan, consentAt: new Date(), purpose });
+
     await BorrowerProfile.updateOne(
       { pan },
       { $set: { aaConsentActive: true, aaConsentExpiry: new Date(consent.expiresAt) } },
       { upsert: true }
     );
+
+    // Also persist structured ConsentRecord
+    const userIdKey = req.user?.userId || req.user?.sub || `DLA-${pan}`;
+    await ConsentRecord.create({
+      id: consent.id,
+      userId: userIdKey,
+      consentType: "AA_FINANCIAL_DATA",
+      purpose,
+      dataCategory,
+      requestedBy: req.user.dlaId || req.user.username || "DLA",
+      provider: "Finvu (MOCK)",
+      status: "GRANTED",
+      consentVersion: "AA-CONSENT-v2.1",
+      version: "AA-CONSENT-v2.1",
+      grantedAt: new Date(),
+      expiresAt: new Date(consent.expiresAt),
+      source: "DLA_AA_CONSENT_FLOW",
+      metadata: { pan },
+    });
+
+    await logCompliance({
+      type: "CONSENT_GRANTED",
+      userId: userIdKey,
+      actor: req.user.username,
+      actorRole: req.user.role,
+      pass: true,
+      details: { consentId: consent.id, pan, type: "AA_FINANCIAL_DATA", purpose },
+    });
+
     return res.json(consent);
   })
 );
 
-// POST /api/aa/fetch  (DLA only)
-// Returns mock bank statement data. Body: { pan }
+// POST /api/aa/fetch  (DLA / Consumer)
+// Returns mock bank statement data only when an active, valid, non-revoked AA consent exists.
 router.post(
   "/aa/fetch",
   authenticate,
-  requireRole("DLA"),
   asyncHandler(async (req, res) => {
     const pan = String((req.body || {}).pan || "").toUpperCase();
     if (!isPan(pan)) {
       return res.status(400).json({ error: "Invalid PAN format" });
     }
+
+    const requestedPurpose = String(req.body.purpose || "CREDIT_ASSESSMENT");
+
+    // Check borrower profile consent flag and ConsentRecord
+    const profile = await BorrowerProfile.findOne({ pan });
+    const consentRecord = await ConsentRecord.findOne({
+      $or: [{ "metadata.pan": pan }, { userId: req.user?.userId || req.user?.sub }],
+      consentType: { $in: ["AA_FINANCIAL_DATA", "AA_DATA"] },
+    }).sort({ createdAt: -1 });
+
+    // Validate consent existence & status
+    if (consentRecord) {
+      if (consentRecord.status === "REVOKED") {
+        await logCompliance({
+          type: "AA_DATA_ACCESS_DENIED",
+          actor: req.user.username,
+          actorRole: req.user.role,
+          pass: false,
+          details: { pan, reason: "Consent Revoked", consentId: consentRecord.id },
+        });
+        return res.status(403).json({
+          error: "AA_CONSENT_REVOKED",
+          message: "Account Aggregator financial data access denied: Consent has been revoked by the borrower.",
+        });
+      }
+
+      if (consentRecord.expiresAt && new Date(consentRecord.expiresAt) < new Date()) {
+        await logCompliance({
+          type: "AA_DATA_ACCESS_DENIED",
+          actor: req.user.username,
+          actorRole: req.user.role,
+          pass: false,
+          details: { pan, reason: "Consent Expired", consentId: consentRecord.id },
+        });
+        return res.status(403).json({
+          error: "AA_CONSENT_EXPIRED",
+          message: "Account Aggregator financial data access denied: Consent validity has expired.",
+        });
+      }
+
+      if (requestedPurpose && requestedPurpose !== "CREDIT_ASSESSMENT" && consentRecord.purpose && !consentRecord.purpose.toLowerCase().includes(requestedPurpose.toLowerCase())) {
+        await logCompliance({
+          type: "PURPOSE_MISMATCH",
+          actor: req.user.username,
+          actorRole: req.user.role,
+          pass: false,
+          details: { pan, requestedPurpose, authorizedPurpose: consentRecord.purpose },
+        });
+        return res.status(403).json({
+          error: "AA_PURPOSE_NOT_AUTHORIZED",
+          message: `Access denied: Requested purpose '${requestedPurpose}' is not authorized under this consent.`,
+        });
+      }
+    } else if (!profile || !profile.aaConsentActive || (profile.aaConsentExpiry && new Date(profile.aaConsentExpiry) < new Date())) {
+      await logCompliance({
+        type: "AA_DATA_ACCESS_DENIED",
+        actor: req.user.username,
+        actorRole: req.user.role,
+        pass: false,
+        details: { pan, reason: "No Active Consent" },
+      });
+      return res.status(403).json({
+        error: "AA_CONSENT_REQUIRED",
+        message: "Account Aggregator data access denied: No active consent found for this borrower.",
+      });
+    }
+
     const statement = aaService.fetchBankStatement({ pan });
+
+    await logCompliance({
+      type: "AA_DATA_FETCHED",
+      actor: req.user.username,
+      actorRole: req.user.role,
+      pass: true,
+      details: { pan, statementMonths: statement.statementMonths, provider: statement.provider },
+    });
+
     return res.json(statement);
   })
 );
 
 module.exports = router;
+

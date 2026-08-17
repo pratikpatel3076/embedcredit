@@ -15,6 +15,7 @@ const ApplicationRoute = require("../models/ApplicationRoute");
 const { authenticate, requireRole } = require("../middleware/auth");
 const { getLenderPortfolio, FLDG_CAP } = require("../middleware/rbiCompliance");
 const asyncHandler = require("../utils/asyncHandler");
+const consentService = require("../services/consent.service");
 
 const router = express.Router();
 
@@ -821,6 +822,17 @@ router.get(
       kfsFailures,
       complianceLogs: { total: logTotal, failures: logFailures },
     });
+  })
+);
+
+// GET /api/admin/consent-analytics (Read-Only Aggregate Consent Metrics)
+router.get(
+  "/admin/consent-analytics",
+  authenticate,
+  requireRole("ADMIN"),
+  asyncHandler(async (req, res) => {
+    const metrics = await consentService.getAdminConsentMetrics();
+    return res.json(metrics);
   })
 );
 

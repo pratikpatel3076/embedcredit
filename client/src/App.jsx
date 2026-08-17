@@ -40,13 +40,18 @@ async function api(path, options = {}) {
   const res = await fetch(`/api${path}`, { ...options, headers });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = new Error(data.error || `Request failed (${res.status})`);
+    const errorMsg =
+      typeof data.error === "object"
+        ? data.error?.message || data.error?.code || "Request failed"
+        : data.error || (typeof data.message === "string" ? data.message : `Request failed (${res.status})`);
+    const err = new Error(errorMsg);
     err.status = res.status;
     err.data = data;
     throw err;
   }
   return data;
 }
+
 
 // ─── STYLES & DESIGN SYSTEM TOKENS ────────────────────────────────
 const styles = `
@@ -855,7 +860,9 @@ function NewApplicationPage({ onSubmit }) {
     monthlyIncome: "65000",
     monthlyObligations: "12000",
     dlaId: "DLA-001",
-    aaConsent: true,
+    kycConsent: false,
+    aaConsent: false,
+    bureauConsent: false,
   });
   const [errors, setErrors] = useState({});
   const [step, setStep] = useState(1);
@@ -870,10 +877,12 @@ function NewApplicationPage({ onSubmit }) {
     if (!form.borrowerName.trim()) e.borrowerName = "Required";
     if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.pan.toUpperCase())) e.pan = "Invalid PAN format (e.g. ABCDE1234F)";
     if (!/^[6-9]\d{9}$/.test(form.mobile)) e.mobile = "Invalid mobile number";
-    if (!form.aaConsent) e.aaConsent = "AA consent required (mandatory per RBI DL rules)";
+    if (!form.kycConsent) e.kycConsent = "KYC identity consent required";
+    if (!form.aaConsent) e.aaConsent = "AA financial consent required (mandatory per RBI DL rules)";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
+
 
   const validate2 = () => {
     const e = {};
@@ -1020,17 +1029,43 @@ function NewApplicationPage({ onSubmit }) {
                 <option value="DLA-003">DLA-003 (LoanFast)</option>
               </select>
             </div>
-            <div className="form-group">
-              <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
-                <input type="checkbox" checked={form.aaConsent} onChange={e => update("aaConsent", e.target.checked)} style={{ marginTop: 3 }} />
-                <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                  <strong>Grant Account Aggregator Consent:</strong> Borrower explicitly authorizes retrieval of financial statements via RBI-regulated Account Aggregator network. Logged with timestamp.
-                </span>
-              </label>
-              {errors.aaConsent && <div className="form-error">{errors.aaConsent}</div>}
+            <div className="card mb-3" style={{ background: "var(--bg-surface-elevated)", border: "1px solid var(--border-color)", padding: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, textTransform: "uppercase", color: "var(--text-muted)" }}>
+                Unbundled Purpose-Specific Consents (Explicit Opt-In)
+              </div>
+              
+              <div className="form-group mb-2">
+                <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+                  <input type="checkbox" checked={form.kycConsent} onChange={e => update("kycConsent", e.target.checked)} style={{ marginTop: 3 }} />
+                  <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                    <strong>1. KYC Identity Verification:</strong> Borrower explicitly authorizes PAN validation and anti-fraud AML screening (Zero-Aadhaar compliance).
+                  </span>
+                </label>
+                {errors.kycConsent && <div className="form-error">{errors.kycConsent}</div>}
+              </div>
+
+              <div className="form-group mb-2">
+                <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+                  <input type="checkbox" checked={form.aaConsent} onChange={e => update("aaConsent", e.target.checked)} style={{ marginTop: 3 }} />
+                  <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                    <strong>2. Account Aggregator (AA) Financial Data:</strong> Borrower explicitly authorizes retrieval of financial statements via RBI-regulated Account Aggregator network. Logged with timestamp.
+                  </span>
+                </label>
+                {errors.aaConsent && <div className="form-error">{errors.aaConsent}</div>}
+              </div>
+
+              <div className="form-group mb-0">
+                <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+                  <input type="checkbox" checked={form.bureauConsent} onChange={e => update("bureauConsent", e.target.checked)} style={{ marginTop: 3 }} />
+                  <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                    <strong>3. Credit Bureau Score Inquiry (Optional):</strong> Authorize official credit bureau scoring for optimal lender rate matching.
+                  </span>
+                </label>
+              </div>
             </div>
           </>
         )}
+
 
         {step === 2 && (
           <>
@@ -3697,23 +3732,410 @@ function LendersPage({ lenders, loading }) {
 // ─── CONSUMER PAGES ───────────────────────────────────────────────
 
 // ÔöÇÔöÇÔöÇ AA CONSENTS PAGE ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
+// ─── CONSENT DETAIL MODAL ─────────────────────────────────────────
+function ConsentDetailModal({ isOpen, onClose, definition, consent, onRevoke, onGrant }) {
+  if (!isOpen || !definition) return null;
+
+  const isGranted = consent && (consent.status === "GRANTED" || consent.status === "ACTIVE");
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backdropFilter: "blur(4px)" }}>
+      <div className="card" style={{ maxWidth: 640, width: "100%", maxHeight: "90vh", overflowY: "auto", border: "1px solid var(--primary-glow)", background: "var(--bg-surface-elevated)", boxShadow: "var(--shadow-lg)" }}>
+        <div className="flex justify-between items-center mb-3">
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800 }}>{definition.title}</div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+              Category: <strong>{definition.categoryLabel}</strong> · Version: <strong style={{ fontFamily: "var(--font-mono)" }}>{definition.version}</strong>
+            </div>
+          </div>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={onClose}>✕</button>
+        </div>
+
+        {/* Status Banner */}
+        <div className="card mb-3" style={{ background: isGranted ? "var(--green-soft)" : "var(--bg-surface)", border: "1px solid " + (isGranted ? "var(--green-border)" : "var(--border-color)"), padding: "10px 14px" }}>
+          <div className="flex justify-between items-center">
+            <div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Current Consent Status</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: isGranted ? "var(--green)" : "var(--text-primary)" }}>
+                {isGranted ? "✓ ACTIVE (GRANTED)" : consent?.status === "REVOKED" ? "✗ REVOKED" : "○ NOT GRANTED"}
+              </div>
+            </div>
+            {consent?.id && (
+              <div style={{ textAlign: "right", fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                ID: {consent.id}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Details Grid */}
+        <div className="card mb-3" style={{ background: "var(--bg-surface)" }}>
+          <div className="mb-3">
+            <div style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700 }}>Stated Processing Purpose</div>
+            <div style={{ fontSize: 13, color: "var(--text-primary)", marginTop: 2, lineHeight: 1.5 }}>
+              {definition.purpose}
+            </div>
+          </div>
+
+          <div className="grid-2 gap-3 mb-3">
+            <div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Authorized Provider</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{definition.provider}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Designated Recipient</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{definition.recipient}</div>
+            </div>
+          </div>
+
+          <div className="grid-2 gap-3 mb-3">
+            <div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Retention Window</div>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{definition.retentionPolicy}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase" }}>Revocability Policy</div>
+              <div style={{ fontSize: 12, color: "var(--green)", fontWeight: 600 }}>Revocable anytime with 24-hour statutory data purge</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Permitted vs Prohibited Data */}
+        <div className="grid-2 gap-3 mb-4">
+          <div className="card card-sm" style={{ borderLeft: "3px solid var(--green)", background: "var(--bg-surface)" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--green)", marginBottom: 6 }}>Permitted Data Elements</div>
+            {definition.dataElements?.map((item) => (
+              <div key={item} style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4, display: "flex", gap: 6 }}>
+                <span style={{ color: "var(--green)" }}>✓</span> {item}
+              </div>
+            ))}
+          </div>
+          <div className="card card-sm" style={{ borderLeft: "3px solid var(--red)", background: "var(--bg-surface)" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--red)", marginBottom: 6 }}>Strictly Prohibited Data</div>
+            {definition.prohibitedData?.map((item) => (
+              <div key={item} style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4, display: "flex", gap: 6 }}>
+                <span style={{ color: "var(--red)" }}>✕</span> {item}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex justify-between items-center pt-2">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Close</button>
+          <div className="flex gap-2">
+            {isGranted ? (
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={() => {
+                  onClose();
+                  onRevoke(consent);
+                }}
+              >
+                Revoke Consent
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  onClose();
+                  onGrant(definition);
+                }}
+              >
+                Grant Explicit Consent →
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CONSENT REVOKE CONFIRMATION MODAL ────────────────────────────
+function ConsentRevokeModal({ isOpen, onClose, consent, onRevoked }) {
+  const [busy, setBusy] = useState(false);
+  const [reason, setReason] = useState("Borrower opted out of data sharing");
+  const [err, setErr] = useState(null);
+
+  if (!isOpen || !consent) return null;
+
+  const handleRevoke = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api(`/consents/${consent.id}/revoke`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
+      if (onRevoked) onRevoked();
+      onClose();
+    } catch (e) {
+      setErr(e.message || "Failed to revoke consent.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1050, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backdropFilter: "blur(4px)" }}>
+      <div className="card" style={{ maxWidth: 520, width: "100%", border: "1px solid var(--red-border)", background: "var(--bg-surface-elevated)" }}>
+        <div className="flex justify-between items-center mb-3">
+          <div style={{ fontSize: 18, fontWeight: 800, color: "var(--red)" }}>Revoke Data Consent</div>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={onClose}>✕</button>
+        </div>
+
+        {err && <div className="card mb-3" style={{ background: "var(--red-soft)", color: "var(--red)", padding: "10px 14px" }}>{err}</div>}
+
+        <div className="card mb-3" style={{ background: "var(--red-soft)", border: "1px solid var(--red-border)" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--red)", marginBottom: 4 }}>
+            ⚠️ 24-Hour Data Deletion Obligation (RBI DL & DPDP Act)
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>
+            Upon revocation, all active financial statements and temporary intermediary caches associated with this consent will be ceased and <strong>permanently deleted within 24 hours</strong>. Historical audit logs will record this revocation.
+          </div>
+        </div>
+
+        <div className="form-group mb-3">
+          <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>Consent ID to Revoke</label>
+          <input className="input" value={consent.id} readOnly style={{ fontFamily: "var(--font-mono)", fontSize: 13 }} />
+        </div>
+
+        <div className="form-group mb-4">
+          <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 4 }}>Reason for Revocation</label>
+          <select className="select" value={reason} onChange={(e) => setReason(e.target.value)}>
+            <option value="Borrower opted out of data sharing">Borrower opted out of data sharing</option>
+            <option value="Loan application cancelled">Loan application cancelled</option>
+            <option value="Privacy preference update">Privacy preference update</option>
+            <option value="Data deletion request under DPDP Act">Data deletion request under DPDP Act</option>
+          </select>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className="btn btn-danger" onClick={handleRevoke} disabled={busy}>
+            {busy ? "Revoking…" : "Confirm Revocation & Purge Data"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CONSENT BATCH OPT-IN / GRANT MODAL ───────────────────────────
+function ConsentBatchModal({ isOpen, onClose, definitions = [], userConsents = [], onUpdated }) {
+  const [selectedTypes, setSelectedTypes] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    // Unchecked by default per explicit opt-in standard
+    const init = {};
+    definitions.forEach((d) => {
+      init[d.type] = false;
+    });
+    setSelectedTypes(init);
+  }, [definitions, isOpen]);
+
+  if (!isOpen) return null;
+
+  const toggle = (type) => {
+    setSelectedTypes((prev) => ({ ...prev, [type]: !prev[type] }));
+  };
+
+  const handleGrant = async () => {
+    const selectedKeys = Object.keys(selectedTypes).filter((k) => selectedTypes[k]);
+    if (selectedKeys.length === 0) {
+      setErr("Please select at least one purpose-specific consent to grant.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      const payload = selectedKeys.map((type) => {
+        const def = definitions.find((d) => d.type === type);
+        return {
+          consentType: type,
+          purpose: def?.purpose,
+          dataCategory: def?.dataCategory,
+          provider: def?.provider,
+          durationDays: def?.durationDays || 180,
+          granted: true,
+        };
+      });
+
+      await api("/consents/batch", {
+        method: "POST",
+        body: JSON.stringify({ consents: payload, source: "CONSENT_CENTER_BATCH_MODAL" }),
+      });
+
+      if (onUpdated) onUpdated();
+      onClose();
+    } catch (e) {
+      setErr(e.message || "Failed to grant consents.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1050, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backdropFilter: "blur(4px)" }}>
+      <div className="card" style={{ maxWidth: 680, width: "100%", maxHeight: "90vh", overflowY: "auto", border: "1px solid var(--primary-glow)", background: "var(--bg-surface-elevated)" }}>
+        <div className="flex justify-between items-center mb-3">
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800 }}>Manage Purpose-Specific Consents</div>
+            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+              Unbundled, explicit opt-ins. Check only the data permissions you wish to grant.
+            </div>
+          </div>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={onClose}>✕</button>
+        </div>
+
+        {err && <div className="card mb-3" style={{ background: "var(--red-soft)", color: "var(--red)", padding: "10px 14px" }}>{err}</div>}
+
+        <div className="card mb-3" style={{ background: "linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(16,185,129,0.06) 100%)", border: "1px solid var(--primary-soft)", padding: "10px 14px" }}>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+            🔒 <strong>Zero-Aadhaar Rule:</strong> Aadhaar numbers are never stored in the database. All verification is handled via privacy-preserving reference tokens.
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+          {definitions.map((def) => {
+            const alreadyActive = userConsents.some((c) => c.consentType === def.type && (c.status === "GRANTED" || c.status === "ACTIVE"));
+            const checked = selectedTypes[def.type] || false;
+
+            return (
+              <div
+                key={def.type}
+                onClick={() => !alreadyActive && toggle(def.type)}
+                className="card card-sm"
+                style={{
+                  background: alreadyActive ? "var(--green-soft)" : checked ? "var(--primary-soft)" : "var(--bg-surface)",
+                  border: "1px solid " + (alreadyActive ? "var(--green-border)" : checked ? "var(--primary)" : "var(--border-color)"),
+                  cursor: alreadyActive ? "default" : "pointer",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={alreadyActive || checked}
+                    disabled={alreadyActive}
+                    onChange={() => !alreadyActive && toggle(def.type)}
+                    style={{ marginTop: 3 }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div className="flex justify-between items-center mb-1">
+                      <strong style={{ fontSize: 13 }}>{def.title}</strong>
+                      {alreadyActive ? (
+                        <span className="badge badge-green" style={{ fontSize: 10 }}>Already Active</span>
+                      ) : (
+                        <span className="badge badge-muted" style={{ fontSize: 10 }}>{def.categoryLabel}</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.4 }}>
+                      {def.purpose}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+                      Provider: <strong>{def.provider}</strong> · Version: {def.version} · Retention: {def.durationDays} days
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex justify-between items-center pt-2">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className="btn btn-primary" onClick={handleGrant} disabled={busy}>
+            {busy ? "Recording Consents…" : "Confirm Selected Consents →"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── UPGRADED AACONSENTS / CONSENT CENTER PAGE ─────────────────────
 function AAConsentsPage() {
+  const [activeTab, setActiveTab] = useState("categories"); // "categories" | "history" | "pillars" | "principles"
+  const [definitions, setDefinitions] = useState([]);
+  const [userConsents, setUserConsents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [statusMessage, setStatusMessage] = useState(null);
+  const [selectedDef, setSelectedDef] = useState(null);
+  const [selectedConsentForRevoke, setSelectedConsentForRevoke] = useState(null);
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [revokedOpen, setRevokedOpen] = useState(false);
 
-  const consentLogs = [
-    { pan: "ABCPS1234D", consentAt: "2024-01-15T10:02:14Z", expiry: "2024-07-14T10:02:14Z", fetched: true, status: "active" },
-    { pan: "PQRRM5678K", consentAt: "2024-01-16T09:18:05Z", expiry: "2024-07-16T09:18:05Z", fetched: true, status: "active" },
-    { pan: "XYZAP9012L", consentAt: "2024-01-14T11:33:41Z", expiry: "2024-07-14T11:33:41Z", fetched: true, status: "active" },
-    { pan: "ABCPA9999K", consentAt: "2024-01-12T14:50:00Z", expiry: "2024-07-12T14:50:00Z", fetched: false, status: "expired" },
-    { pan: "CDEFM4567N", consentAt: "2024-01-10T08:22:11Z", expiry: "2024-07-10T08:22:11Z", fetched: true, status: "expired" },
-  ];
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [defsRes, consRes] = await Promise.all([
+        api("/consents/definitions").catch(() => []),
+        api("/consents").catch(() => []),
+      ]);
+      setDefinitions(Array.isArray(defsRes) ? defsRes : []);
+      setUserConsents(Array.isArray(consRes) ? consRes : (consRes?.consents || []));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const activeCount = userConsents.filter((c) => (c.status === "GRANTED" || c.status === "ACTIVE") && new Date(c.expiresAt) >= new Date()).length;
+
+  const handleGrantSingle = async (def) => {
+    // Optimistic dynamic update for instant UI feedback
+    const optimisticRecord = {
+      id: "CNS-" + Math.random().toString(36).slice(2, 7).toUpperCase(),
+      consentType: def.type,
+      purpose: def.purpose,
+      dataCategory: def.dataCategory,
+      provider: def.provider,
+      status: "GRANTED",
+      consentVersion: def.version || "AA-CONSENT-v2.1",
+      version: def.version || "AA-CONSENT-v2.1",
+      grantedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + (def.durationDays || 180) * 24 * 60 * 60 * 1000).toISOString(),
+      source: "CONSENT_CENTER_SINGLE_GRANT",
+    };
+    setUserConsents((prev) => [optimisticRecord, ...prev.filter((c) => c.consentType !== def.type)]);
+    setStatusMessage("Completed");
+    setTimeout(() => setStatusMessage(null), 4000);
+
+    try {
+      await api("/consents", {
+        method: "POST",
+        body: JSON.stringify({
+          consentType: def.type,
+          purpose: def.purpose,
+          dataCategory: def.dataCategory,
+          provider: def.provider,
+          durationDays: def.durationDays || 180,
+          source: "CONSENT_CENTER_SINGLE_GRANT",
+        }),
+      });
+      await loadData();
+    } catch (e) {
+      await loadData();
+    }
+  };
 
   const principles = [
     { title: "1. User Consent", body: "No financial data may be fetched without explicit, informed, and revocable consent from the borrower. The consent must clearly state which data is being requested, for what purpose, and for how long it will be retained. On this platform, AA consent is captured during loan application and logged with a timestamp." },
     { title: "2. Data Minimisation", body: "Only the minimum data necessary for the stated purpose may be fetched. A lending platform cannot request transaction history unrelated to credit decisioning, nor can it pull data for future products without fresh consent. Each data request must map to a specific underwriting variable." },
-    { title: "3. Purpose Limitation", body: "Data fetched via the AA framework may only be used for the specific purpose stated at the time of consent. On this platform, that purpose is strictly credit decisioning ÔÇö matching the borrower to eligible lenders. Using AA data for marketing, cross-selling, or profiling is a violation of RBI guidelines." },
-    { title: "4. Storage Limitation", body: "Fetched data must not be retained beyond the period necessary for the stated purpose. On this platform, all AA-sourced bank statement data is automatically purged after 180 days. AnyÕë»µ£¼ stored in intermediary systems must also be deleted within the same window." },
+    { title: "3. Purpose Limitation", body: "Data fetched via the AA framework may only be used for the specific purpose stated at the time of consent. On this platform, that purpose is strictly credit decisioning — matching the borrower to eligible lenders. Using AA data for marketing, cross-selling, or profiling is a violation of RBI guidelines." },
+    { title: "4. Storage Limitation", body: "Fetched data must not be retained beyond the period necessary for the stated purpose. On this platform, all AA-sourced bank statement data is automatically purged after 180 days. Any copies stored in intermediary systems must also be deleted within the same window." },
     { title: "5. Accuracy", body: "The platform must take reasonable steps to ensure that the financial data used for decisioning is accurate and up-to-date. Credit decisions must not be based on stale or incomplete data. Re-fetching is triggered only with fresh consent and timestamp." },
     { title: "6. Integrity", body: "Data fetched through the AA network must be protected against unauthorised access, accidental loss, or destruction. All AA data in transit and at rest must be encrypted. Access controls must ensure only the lending engine and authorised compliance officers can view raw statement data." },
     { title: "7. Accountability", body: "The DLA (Digital Lending App) is accountable for every data access made through the AA network. Each consent grant, data fetch, and deletion must be logged in an immutable audit trail. RBI examiners can request this audit trail at any time to verify compliance." },
@@ -3721,105 +4143,433 @@ function AAConsentsPage() {
 
   return (
     <div>
-      <div className="card mb-4">
-        <div className="section-header">
-          <div className="section-title">Consent Rules ÔÇö What Can & Cannot Be Fetched</div>
-          <span className="badge badge-green">RBI AA Framework</span>
+      {/* Success Notification Banner */}
+      {statusMessage && (
+        <div
+          className="card mb-3"
+          style={{
+            background: "var(--green-soft)",
+            border: "1px solid var(--green-border)",
+            color: "var(--green)",
+            padding: "12px 18px",
+            fontWeight: 700,
+            fontSize: 14,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            borderRadius: "var(--radius)",
+            boxShadow: "var(--shadow-sm)",
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <span>✓</span>
+            <span>{statusMessage}</span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            onClick={() => setStatusMessage(null)}
+            style={{ color: "var(--green)", fontWeight: 800 }}
+          >
+            ✕
+          </button>
         </div>
-        <div className="grid-2">
-          <div className="card card-sm" style={{ borderLeft: "3px solid var(--green)" }}>
-            <div className="card-title" style={{ color: "var(--green)", marginBottom: 10 }}>Permitted Data</div>
-            {["Bank statements (6ÔÇô12 months)", "Salary / income credit patterns", "UPI transaction history", "Recurring deposit patterns", "Loan account balances"].map((item) => (
-              <div key={item} style={{ fontSize: 12, color: "var(--text-secondary)", padding: "4px 0", display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ color: "var(--green)" }}>Ô£ô</span> {item}
-              </div>
-            ))}
-          </div>
-          <div className="card card-sm" style={{ borderLeft: "3px solid var(--red)" }}>
-            <div className="card-title" style={{ color: "var(--red)", marginBottom: 10 }}>Prohibited Data</div>
-            {["Aadhaar biometrics", "Raw account credentials / passwords", "Aadhaar OTP / eKYC raw XML", "Debit card CVV / PIN", "Tax returns beyond stated purpose"].map((item) => (
-              <div key={item} style={{ fontSize: 12, color: "var(--text-secondary)", padding: "4px 0", display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ color: "var(--red)" }}>Ô£ù</span> {item}
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="grid-2" style={{ marginTop: 14 }}>
-          <div className="card card-sm">
-            <div className="card-title" style={{ marginBottom: 8 }}>Retention Period</div>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>All AA-sourced data is <strong style={{ color: "var(--text-primary)" }}>automatically deleted after 180 days</strong>. No extensions are permitted. Deletion is logged and auditable.</div>
-          </div>
-          <div className="card card-sm">
-            <div className="card-title" style={{ marginBottom: 8 }}>Purpose Limitation</div>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>Data is used <strong style={{ color: "var(--text-primary)" }}>exclusively for credit decisioning</strong> ÔÇö matching borrower eligibility against onboarded lenders. No marketing, profiling, or secondary use.</div>
-          </div>
-        </div>
-      </div>
+      )}
 
-      <div className="card mb-4">
-        <div className="section-header">
-          <div className="section-title">Consent Log</div>
-          <span className="badge badge-muted">{consentLogs.length} Records</span>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Borrower PAN</th>
-                <th>Consent Given At</th>
-                <th>Expiry Date</th>
-                <th>Data Fetched</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {consentLogs.map((row) => (
-                <tr key={row.pan + row.consentAt}>
-                  <td className="td-mono td-primary">{row.pan}</td>
-                  <td className="td-mono">{new Date(row.consentAt).toLocaleString("en-IN")}</td>
-                  <td className="td-mono">{new Date(row.expiry).toLocaleDateString("en-IN")}</td>
-                  <td><span className={`badge ${row.fetched ? "badge-green" : "badge-muted"}`}>{row.fetched ? "Yes" : "No"}</span></td>
-                  <td><span className={`badge ${row.status === "active" ? "badge-green" : "badge-red"}`}>{row.status}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Detail Modal */}
+      <ConsentDetailModal
+        isOpen={Boolean(selectedDef)}
+        onClose={() => setSelectedDef(null)}
+        definition={selectedDef}
+        consent={userConsents.find((c) => (c.consentType === selectedDef?.type || c.consentType === selectedDef?.purposeEnum) && (c.status === "GRANTED" || c.status === "ACTIVE"))}
+        onRevoke={(c) => setSelectedConsentForRevoke(c)}
+        onGrant={(d) => handleGrantSingle(d)}
+      />
 
-      <div className="card mb-4">
-        <div className="section-header" style={{ cursor: "pointer" }} onClick={() => setRulesOpen(!rulesOpen)}>
-          <div className="section-title">AA Framework Rules ÔÇö 7 RBI-Mandated Principles</div>
-          <span className="badge badge-blue">{rulesOpen ? "Ôû¥ Collapse" : "Ôû© Expand"}</span>
-        </div>
-        {rulesOpen && (
-          <div style={{ paddingTop: 4 }}>
-            {principles.map((p) => (
-              <div key={p.title} className="card card-sm" style={{ marginBottom: 10 }}>
-                <div className="card-title" style={{ marginBottom: 6 }}>{p.title}</div>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>{p.body}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Revoke Modal */}
+      <ConsentRevokeModal
+        isOpen={Boolean(selectedConsentForRevoke)}
+        onClose={() => setSelectedConsentForRevoke(null)}
+        consent={selectedConsentForRevoke}
+        onRevoked={(revokedConsent) => {
+          if (revokedConsent) {
+            setUserConsents((prev) =>
+              prev.map((c) =>
+                c.id === revokedConsent.id || c.consentType === revokedConsent.consentType
+                  ? { ...c, status: "REVOKED", revokedAt: new Date().toISOString() }
+                  : c
+              )
+            );
+          }
+          setStatusMessage("Completed");
+          setTimeout(() => setStatusMessage(null), 4000);
+          loadData();
+        }}
+      />
 
-      <div className="card" style={{ cursor: "pointer" }} onClick={() => setRevokedOpen(!revokedOpen)}>
-        <div className="section-header" style={{ marginBottom: revokedOpen ? 14 : 0 }}>
-          <div className="section-title">What Happens If Consent Is Revoked?</div>
-          <span className="badge badge-amber">{revokedOpen ? "Ôû¥ Collapse" : "Ôû© Expand"}</span>
-        </div>
-        {revokedOpen && (
-          <div className="card card-sm" style={{ background: "var(--red-soft)", border: "1px solid var(--red-border)" }}>
-            <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-              <strong style={{ color: "var(--red)" }}>Data Deletion Obligation (24 Hours):</strong> When a borrower revokes AA consent, the platform must cease all data access immediately and <strong>permanently delete all fetched data within 24 hours</strong>. This includes raw bank statement data, derived summaries, and any copies stored in intermediary caches. The deletion must be logged with a timestamp and made available for audit. After deletion, the loan application may still proceed using only non-AA data (CIBIL score, self-declared income), but the borrower must be informed that their eligibility assessment will be limited.
+      {/* Batch Opt-In Modal */}
+      <ConsentBatchModal
+        isOpen={batchModalOpen}
+        onClose={() => setBatchModalOpen(false)}
+        definitions={definitions}
+        userConsents={userConsents}
+        onUpdated={(grantedList = []) => {
+          const newRecords = grantedList.map((item) => ({
+            id: "CNS-" + Math.random().toString(36).slice(2, 7).toUpperCase(),
+            consentType: item.consentType,
+            purpose: item.purpose,
+            dataCategory: item.dataCategory,
+            provider: item.provider,
+            status: "GRANTED",
+            consentVersion: "AA-CONSENT-v2.1",
+            version: "AA-CONSENT-v2.1",
+            grantedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
+            source: "CONSENT_CENTER",
+          }));
+          const grantedTypes = new Set(grantedList.map((g) => g.consentType));
+          setUserConsents((prev) => [...newRecords, ...prev.filter((c) => !grantedTypes.has(c.consentType))]);
+          setStatusMessage("Completed");
+          setTimeout(() => setStatusMessage(null), 4000);
+          loadData();
+        }}
+      />
+
+
+      {/* Hero Card */}
+      <div className="card mb-4" style={{ background: "linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(16,185,129,0.08) 100%)", borderColor: "var(--primary-soft)" }}>
+
+        <div className="flex justify-between items-center flex-wrap gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span style={{ fontSize: 20, fontWeight: 800 }}>Account Aggregator & Consent Center</span>
+              <span className="badge badge-green">RBI DL 2022</span>
+              <span className="badge badge-blue">DPDP ACT 2023</span>
+            </div>
+            <div style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 4 }}>
+              Auditable, purpose-specific consent management rails across Consumers, Regulated Lenders, and DLAs/LSPs.
             </div>
           </div>
-        )}
+          <div className="flex gap-2">
+            <button className="btn btn-secondary" onClick={() => loadData()} disabled={loading}>
+              🔄 Refresh
+            </button>
+            <button className="btn btn-primary" onClick={() => setBatchModalOpen(true)}>
+              + Manage / Grant Consents
+            </button>
+          </div>
+        </div>
+
+        {/* 4-KPI Overview */}
+        <div className="grid-4 gap-3 mt-3">
+          <div className="card card-sm" style={{ background: "var(--bg-surface-elevated)" }}>
+            <div style={{ color: "var(--text-muted)", fontSize: 11, textTransform: "uppercase" }}>Active Consents</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "var(--green)", marginTop: 2 }}>{activeCount} / {definitions.length || 7}</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Purpose-authorized active gates</div>
+          </div>
+          <div className="card card-sm" style={{ background: "var(--bg-surface-elevated)" }}>
+            <div style={{ color: "var(--text-muted)", fontSize: 11, textTransform: "uppercase" }}>Consent Version</div>
+            <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2, fontFamily: "var(--font-mono)" }}>AA-CONSENT-v2.1</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Standardized schema version</div>
+          </div>
+          <div className="card card-sm" style={{ background: "var(--bg-surface-elevated)" }}>
+            <div style={{ color: "var(--text-muted)", fontSize: 11, textTransform: "uppercase" }}>Zero-Aadhaar Policy</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--blue)", marginTop: 2 }}>STRICTLY ENFORCED</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>No Aadhaar storage in DB/logs</div>
+          </div>
+          <div className="card card-sm" style={{ background: "var(--bg-surface-elevated)" }}>
+            <div style={{ color: "var(--text-muted)", fontSize: 11, textTransform: "uppercase" }}>Revocation Deletion SLA</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "var(--amber)", marginTop: 2 }}>24 Hours</div>
+            <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Automated cache purge window</div>
+          </div>
+        </div>
       </div>
+
+      {/* Tab Navigation */}
+      <div className="flex gap-2 mb-4" style={{ borderBottom: "1px solid var(--border-color)", paddingBottom: 8 }}>
+        <button
+          className={`btn btn-sm ${activeTab === "categories" ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => setActiveTab("categories")}
+        >
+          📋 Purpose-Specific Consents ({definitions.length || 7})
+        </button>
+        <button
+          className={`btn btn-sm ${activeTab === "history" ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => setActiveTab("history")}
+        >
+          📜 Consent Audit Ledger ({userConsents.length})
+        </button>
+        <button
+          className={`btn btn-sm ${activeTab === "pillars" ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => setActiveTab("pillars")}
+        >
+          🏛️ 3 Data Principal Pillars
+        </button>
+        <button
+          className={`btn btn-sm ${activeTab === "principles" ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => setActiveTab("principles")}
+        >
+          ⚖️ RBI DPDP Governance Rules
+        </button>
+      </div>
+
+      {/* TAB 1: PURPOSE-SPECIFIC CONSENTS GRID */}
+      {activeTab === "categories" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 14 }}>
+          {definitions.map((def) => {
+            const activeConsent = userConsents.find((c) => c.consentType === def.type && (c.status === "GRANTED" || c.status === "ACTIVE"));
+            const revokedConsent = userConsents.find((c) => c.consentType === def.type && c.status === "REVOKED");
+
+            return (
+              <div
+                key={def.type}
+                className="card flex flex-col justify-between"
+                style={{
+                  border: "1px solid " + (activeConsent ? "var(--green-border)" : "var(--border-color)"),
+                  background: "var(--bg-surface)",
+                }}
+              >
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="badge badge-muted" style={{ fontSize: 10 }}>{def.categoryLabel}</span>
+                    {activeConsent ? (
+                      <span className="badge badge-green">✓ Active (Granted)</span>
+                    ) : revokedConsent ? (
+                      <span className="badge badge-red">✗ Revoked</span>
+                    ) : (
+                      <span className="badge badge-muted">○ Not Granted</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>{def.title}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12, lineHeight: 1.5 }}>
+                    {def.purpose}
+                  </div>
+
+                  <div className="card card-sm mb-3" style={{ background: "var(--bg-surface-elevated)", padding: "8px 10px", fontSize: 11 }}>
+                    <div className="flex justify-between mb-1">
+                      <span style={{ color: "var(--text-muted)" }}>Provider:</span>
+                      <strong>{def.provider}</strong>
+                    </div>
+                    <div className="flex justify-between mb-1">
+                      <span style={{ color: "var(--text-muted)" }}>Recipient:</span>
+                      <strong style={{ maxWidth: 160, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{def.recipient}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span style={{ color: "var(--text-muted)" }}>Version:</span>
+                      <strong style={{ fontFamily: "var(--font-mono)" }}>{def.version}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2" style={{ borderTop: "1px solid var(--border-color)" }}>
+                  <button className="btn btn-sm btn-secondary w-full" onClick={() => setSelectedDef(def)}>
+                    View Details & Terms
+                  </button>
+                  {activeConsent ? (
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={() => setSelectedConsentForRevoke(activeConsent)}
+                      style={{ whiteSpace: "nowrap" }}
+                    >
+                      Revoke
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => handleGrantSingle(def)}
+                      style={{ whiteSpace: "nowrap" }}
+                    >
+                      Grant
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* TAB 2: CONSENT AUDIT HISTORY LEDGER */}
+      {activeTab === "history" && (
+        <div className="card">
+          <div className="section-header mb-3">
+            <div>
+              <div className="section-title">Consent Lifecycle & Compliance Audit Ledger</div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                Chronological record of all explicit grants, rejections, revocations, and expiry transitions
+              </div>
+            </div>
+            <span className="badge badge-muted">{userConsents.length} Records</span>
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Consent ID</th>
+                  <th>Consent Type</th>
+                  <th>Purpose</th>
+                  <th>Provider / Source</th>
+                  <th>Version</th>
+                  <th>Granted Date</th>
+                  <th>Expiry Date</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {userConsents.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: "center", padding: 24 }}>No consent logs found.</td>
+                  </tr>
+                ) : (
+                  userConsents.map((c) => (
+                    <tr key={c.id}>
+                      <td><strong style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{c.id}</strong></td>
+                      <td><span className="badge badge-blue">{c.consentType}</span></td>
+                      <td style={{ maxWidth: 220, fontSize: 12 }}>{c.purpose}</td>
+                      <td style={{ fontSize: 12 }}>{c.provider || c.source}</td>
+                      <td><span className="badge badge-muted" style={{ fontFamily: "var(--font-mono)", fontSize: 10 }}>{c.consentVersion || c.version || "v2.1"}</span></td>
+                      <td style={{ fontSize: 11 }}>{new Date(c.grantedAt || c.createdAt).toLocaleDateString("en-IN")}</td>
+                      <td style={{ fontSize: 11 }}>{new Date(c.expiresAt).toLocaleDateString("en-IN")}</td>
+                      <td>
+                        <span className={`badge ${c.status === "GRANTED" || c.status === "ACTIVE" ? "badge-green" : c.status === "REVOKED" ? "badge-red" : "badge-amber"}`}>
+                          {c.status}
+                        </span>
+                      </td>
+                      <td>
+                        {(c.status === "GRANTED" || c.status === "ACTIVE") && (
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => setSelectedConsentForRevoke(c)}
+                            style={{ padding: "3px 8px", fontSize: 10 }}
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: 3 DATA PRINCIPAL PILLARS */}
+      {activeTab === "pillars" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
+          <div className="card" style={{ borderLeft: "4px solid var(--green)", background: "var(--bg-surface)" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--green)", textTransform: "uppercase" }}>Pillar 1</div>
+            <div style={{ fontSize: 18, fontWeight: 800, margin: "6px 0" }}>Consumers / Data Principals</div>
+            <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 12 }}>
+              The individual whose data is collected. Has the absolute legal right to give unbundled, informed consent, view all authorized recipients, and revoke access at any time with an automated 24-hour data deletion obligation.
+            </div>
+            <div className="card card-sm" style={{ background: "var(--bg-surface-elevated)", fontSize: 11 }}>
+              <div>✓ Explicit opt-in only (no pre-checked boxes)</div>
+              <div>✓ Zero-Aadhaar storage guarantee</div>
+              <div>✓ Instant revocability via Consent Center</div>
+            </div>
+          </div>
+
+          <div className="card" style={{ borderLeft: "4px solid var(--blue)", background: "var(--bg-surface)" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--blue)", textTransform: "uppercase" }}>Pillar 2</div>
+            <div style={{ fontSize: 18, fontWeight: 800, margin: "6px 0" }}>Regulated Lending Entities (REs)</div>
+            <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 12 }}>
+              Banks and NBFCs licensed by the RBI. Authorized to receive and process borrower financial indicators strictly for underwriting, risk assessment, and loan contract execution. Prohibited from cross-selling or group sharing.
+            </div>
+            <div className="card card-sm" style={{ background: "var(--bg-surface-elevated)", fontSize: 11 }}>
+              <div>✓ Purpose-bound underwriting access</div>
+              <div>✓ Direct fund disbursals (No escrow/pool accounts)</div>
+              <div>✓ RBI KFS snapshot generation</div>
+            </div>
+          </div>
+
+          <div className="card" style={{ borderLeft: "4px solid var(--amber)", background: "var(--bg-surface)" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--amber)", textTransform: "uppercase" }}>Pillar 3</div>
+            <div style={{ fontSize: 18, fontWeight: 800, margin: "6px 0" }}>Digital Lending Apps (DLAs) / LSPs</div>
+            <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 12 }}>
+              Lending Service Providers facilitating customer interface and technical orchestration. Must operate with transparent disclosure of partner lenders, mandate status, and zero contact/location harvesting.
+            </div>
+            <div className="card card-sm" style={{ background: "var(--bg-surface-elevated)", fontSize: 11 }}>
+              <div>✓ Clear partner lender disclosure</div>
+              <div>✓ No background surveillance or contact harvesting</div>
+              <div>✓ Immutable compliance audit logging</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: RBI DPDP GOVERNANCE RULES */}
+      {activeTab === "principles" && (
+        <div>
+          <div className="card mb-4">
+            <div className="section-header">
+              <div className="section-title">Permitted vs Prohibited Data Elements</div>
+              <span className="badge badge-green">RBI AA Framework</span>
+            </div>
+            <div className="grid-2 gap-3">
+              <div className="card card-sm" style={{ borderLeft: "3px solid var(--green)", background: "var(--bg-surface)" }}>
+                <div className="card-title" style={{ color: "var(--green)", marginBottom: 10 }}>Permitted Data Elements</div>
+                {["Bank statements (6–12 months via AA)", "Salary and income credit patterns", "UPI transaction indicators", "Recurring deposit & repayment history", "Loan account balances & obligations"].map((item) => (
+                  <div key={item} style={{ fontSize: 12, color: "var(--text-secondary)", padding: "4px 0", display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ color: "var(--green)" }}>✓</span> {item}
+                  </div>
+                ))}
+              </div>
+              <div className="card card-sm" style={{ borderLeft: "3px solid var(--red)", background: "var(--bg-surface)" }}>
+                <div className="card-title" style={{ color: "var(--red)", marginBottom: 10 }}>Strictly Prohibited Data Elements</div>
+                {["Aadhaar numbers & biometric XML (Zero-Aadhaar Policy)", "Account passwords / Net-banking credentials", "Debit card CVV / PIN numbers", "Continuous GPS background location tracking", "Phone contact list & SMS harvesting"].map((item) => (
+                  <div key={item} style={{ fontSize: 12, color: "var(--text-secondary)", padding: "4px 0", display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ color: "var(--red)" }}>✕</span> {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="card mb-4">
+            <div className="section-header" style={{ cursor: "pointer" }} onClick={() => setRulesOpen(!rulesOpen)}>
+              <div className="section-title">7 RBI-Mandated Data Governance Principles</div>
+              <span className="badge badge-blue">{rulesOpen ? "▲ Collapse" : "▼ Expand"}</span>
+            </div>
+            {rulesOpen && (
+              <div style={{ paddingTop: 4 }}>
+                {principles.map((p) => (
+                  <div key={p.title} className="card card-sm" style={{ marginBottom: 10, background: "var(--bg-surface)" }}>
+                    <div className="card-title" style={{ marginBottom: 6 }}>{p.title}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>{p.body}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ cursor: "pointer" }} onClick={() => setRevokedOpen(!revokedOpen)}>
+            <div className="section-header" style={{ marginBottom: revokedOpen ? 14 : 0 }}>
+              <div className="section-title">What Happens If Consent Is Revoked?</div>
+              <span className="badge badge-amber">{revokedOpen ? "▲ Collapse" : "▼ Expand"}</span>
+            </div>
+            {revokedOpen && (
+              <div className="card card-sm" style={{ background: "var(--red-soft)", border: "1px solid var(--red-border)" }}>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                  <strong style={{ color: "var(--red)" }}>Data Deletion Obligation (24 Hours):</strong> When a borrower revokes AA consent, the platform must cease all data access immediately and <strong>permanently delete all fetched data within 24 hours</strong>. This includes raw bank statement data, derived summaries, and any copies stored in intermediary caches. The deletion must be logged with a timestamp and made available for audit.
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+// ─── ALIAS FOR BACKWARD COMPATIBILITY ──────────────────────────────
+function ConsentsPage() {
+  return <AAConsentsPage />;
+}
+
 
 // ÔöÇÔöÇÔöÇ CIBIL PULLS PAGE ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ
 function CibilPullsPage() {
@@ -4899,6 +5649,7 @@ function LoanDetailModal({ isOpen, onClose, loanId, onLoanUpdated }) {
 function ConsumerDashboardPage({ user, onNavigate }) {
   const [creditProfile, setCreditProfile] = useState(null);
   const [facilityData, setFacilityData] = useState(null);
+  const [consentSummary, setConsentSummary] = useState(null);
   const [intents, setIntents] = useState([]);
   const [offers, setOffers] = useState([]);
   const [myLoans, setMyLoans] = useState([]);
@@ -4910,20 +5661,23 @@ function ConsumerDashboardPage({ user, onNavigate }) {
 
   const loadData = async () => {
     try {
-      const [cp, facRes, intRes, loanRes] = await Promise.all([
+      const [cp, facRes, intRes, loanRes, conSumRes] = await Promise.all([
         api("/credit-profile").catch(() => null),
         api("/credit/account").catch(() => null),
         api("/loan-intents").catch(() => []),
         api("/my-loans").catch(() => []),
+        api("/consents/summary").catch(() => null),
       ]);
       setCreditProfile(cp);
       setFacilityData(facRes);
+      if (conSumRes) setConsentSummary(conSumRes);
 
       const parsedIntents = Array.isArray(intRes) ? intRes : (intRes?.intents || intRes?.data || []);
       setIntents(parsedIntents);
 
       const parsedLoans = Array.isArray(loanRes) ? loanRes : (loanRes?.apps || loanRes?.loans || loanRes?.data || []);
       setMyLoans(parsedLoans);
+
 
       if (parsedIntents.length > 0) {
         const activeIntent = parsedIntents[0];
@@ -5146,8 +5900,60 @@ function ConsumerDashboardPage({ user, onNavigate }) {
         </div>
       </div>
 
+      {/* Purpose-Specific Consent Governance Status Card */}
+      <div className="card mb-4" style={{ background: "linear-gradient(135deg, rgba(37,99,235,0.06) 0%, rgba(16,185,129,0.05) 100%)", border: "1px solid var(--border-color)" }}>
+        <div className="flex justify-between items-center flex-wrap gap-2 mb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span style={{ fontSize: 16, fontWeight: 700 }}>Data Governance & Active Consents</span>
+              <span className="badge badge-green">DPDP & RBI AA Compliant</span>
+            </div>
+            <div style={{ color: "var(--text-muted)", fontSize: 12, marginTop: 2 }}>
+              Purpose-specific data permissions governing financial analysis and credit matching
+            </div>
+          </div>
+          <button className="btn btn-sm btn-secondary" onClick={() => onNavigate("aa-consents")}>
+            Manage Consents in Consent Center →
+          </button>
+        </div>
+        <div className="grid-3 text-sm gap-2">
+          <div className="card card-sm" style={{ background: "var(--bg-surface)" }}>
+            <div className="flex items-center gap-2">
+              <span style={{ color: consentSummary?.isAaActive !== false ? "var(--green)" : "var(--amber)", fontWeight: 700 }}>
+                {consentSummary?.isAaActive !== false ? "✓" : "○"}
+              </span>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 12 }}>AA Financial Data (Finvu)</div>
+                <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{consentSummary?.isAaActive !== false ? "Active (Valid 180d)" : "Not Active / Revoked"}</div>
+              </div>
+            </div>
+          </div>
+          <div className="card card-sm" style={{ background: "var(--bg-surface)" }}>
+            <div className="flex items-center gap-2">
+              <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 12 }}>KYC Identity & PAN</div>
+                <div style={{ fontSize: 10, color: "var(--text-muted)" }}>Active (Zero-Aadhaar)</div>
+              </div>
+            </div>
+          </div>
+          <div className="card card-sm" style={{ background: "var(--bg-surface)" }}>
+            <div className="flex items-center gap-2">
+              <span style={{ color: consentSummary?.isBureauActive !== false ? "var(--green)" : "var(--amber)", fontWeight: 700 }}>
+                {consentSummary?.isBureauActive !== false ? "✓" : "○"}
+              </span>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 12 }}>CIBIL Bureau Query</div>
+                <div style={{ fontSize: 10, color: "var(--text-muted)" }}>{consentSummary?.isBureauActive !== false ? "Active (Cached 90d)" : "Pending Consent"}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Category Intent Cards (Drawdown Quick Triggers) */}
       <div className="card mb-4">
+
         <div className="section-header mb-3">
           <div>
             <div className="section-title">What do you need credit for?</div>
@@ -6569,65 +7375,9 @@ function OffersComparisonPage({ intentId, onOfferSelected }) {
   );
 }
 
-function ConsentsPage() {
-  const [consents, setConsents] = useState([]);
-
-  useEffect(() => {
-    api("/consents")
-      .then((res) => setConsents(Array.isArray(res) ? res : (res?.consents || [])))
-      .catch(() => setConsents([]));
-  }, []);
-
-  return (
-    <div className="card">
-      <div className="section-header mb-3">
-        <div>
-          <div className="section-title">Privacy & Consent Audit Trail</div>
-          <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
-            RBI Account Aggregator & Bureau Query consent logs (Revocable)
-          </div>
-        </div>
-        <span className="badge badge-green">Consent Governance</span>
-      </div>
-
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Consent ID</th>
-              <th>Type</th>
-              <th>Purpose</th>
-              <th>Provider</th>
-              <th>Status</th>
-              <th>Granted At</th>
-              <th>Expires At</th>
-            </tr>
-          </thead>
-          <tbody>
-            {consents.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: "center" }}>No consent logs found.</td></tr>
-            ) : (
-              consents.map((c) => (
-                <tr key={c.id}>
-                  <td><strong style={{ fontFamily: "var(--font-mono)" }}>{c.id}</strong></td>
-                  <td><span className="badge badge-blue">{c.consentType}</span></td>
-                  <td>{c.purpose}</td>
-                  <td>{c.provider}</td>
-                  <td><span className="badge badge-green">{c.status}</span></td>
-                  <td>{new Date(c.grantedAt).toLocaleDateString()}</td>
-                  <td>{new Date(c.expiresAt).toLocaleDateString()}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 // ─── APP SHELL ─────────────────────────────────────────────────────
 export default function App() {
+
   const [theme, toggleTheme] = useTheme();
   const [page, setPage] = useState("dashboard");
   const [auth, setAuth] = useState(null);

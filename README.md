@@ -1,92 +1,417 @@
-# EmbedCredit — Embedded Credit Marketplace (MERN)
+# EmbedCredit — Embedded Consumption Credit Marketplace
 
-RBI-compliant (Digital Lending Guidelines 2022) marketplace that matches
-borrower applications originated by Digital Lending Apps (DLAs) to eligible
-Banks/NBFCs, generates the mandatory Key Fact Statement (KFS) before routing,
-enforces a 5% FLDG cap per lender, and records disbursal — while never touching
-money itself (funds flow lender → borrower directly).
+> **A compliant, non-custodial credit marketplace connecting Consumers, DLAs/LSPs, and Banks/NBFCs.**
 
-## Tech Stack
+## Problem
 
-- Client: React 18 + Vite (design preserved from original prototype)
-- Server: Node.js + Express
-- DB: MongoDB (Mongoose ODM)
-- Auth: JWT (in-memory on client), 3 roles — DLA, LENDER, ADMIN
-- Mock services: CIBIL bureau pull, AA (Account Aggregator), OCEN 4.0
-- Docker: mongo + server + client via docker-compose
+The digital lending ecosystem is fragmented between **consumers, Digital Lending Apps (DLAs), Loan Service Providers (LSPs), and regulated lenders**.
 
-## Repository Layout
+Consumers often face difficulty in:
 
+* Discovering suitable consumption-credit products
+* Comparing multiple lender offers
+* Understanding their available credit
+* Accessing approved credit when needed
+* Managing repayments
+
+At the same time, DLAs/LSPs face integration complexity when connecting with multiple lenders.
+
+### Problem Statement
+
+> **Build a digital lending marketplace focused on expanding access and availability of consumption credit while simplifying integrations between Digital Lending Apps, lenders, and Loan Service Providers.**
+
+---
+
+## Solution
+
+**EmbedCredit** acts as the marketplace and orchestration layer between consumers, DLAs/LSPs, and regulated lenders.
+
+It enables consumers to:
+
+```text
+Create Profile
+      ↓
+Build Credit Profile
+      ↓
+Give Required Consent
+      ↓
+Discover Credit Offers
+      ↓
+Compare Lender Products
+      ↓
+Select Offer
+      ↓
+KFS
+      ↓
+Lender Underwriting
+      ↓
+Approved Credit Facility
+      ↓
+Get Credit
+      ↓
+Loan / Drawdown
+      ↓
+Installment Repayment
+      ↓
+Credit Restored
 ```
-vantage-credit/
-  client/         React app (src/App.jsx = full UI, wired to /api)
-  server/
-    models/       LoanApplication, LenderProduct, ApplicationRoute,
-                  BorrowerProfile, User, ComplianceLog
-    services/     creditEngine.js, kfsGenerator.js (ported 1:1 from frontend),
-                  bureauService.js, aaService.js, ocenService.js (mocks)
-    routes/       auth, dla, lender, admin, engine
-    middleware/   validate.js, rbiCompliance.js, auth.js
-    config/       constants.js (FLDG_CAP=0.05, MAX_DTI=0.55), db.js
-    seed.js       demo data (idempotent)
-  docs/API.md     full route reference
-  docker-compose.yml, .env.example
+
+EmbedCredit **does not become the lender and does not handle loan funds**.
+
+Actual funds flow directly between the lender and borrower.
+
+---
+
+# Architecture
+
+```text
+                         CONSUMER
+                            │
+                            ▼
+                     USER PROFILE
+                            │
+                            ▼
+                    CREDIT PROFILE
+                            │
+                            ▼
+                    CREDIT INTENT
+                            │
+                            ▼
+                 ┌──────────────────┐
+                 │   EMBEDCREDIT    │
+                 │    MARKETPLACE   │
+                 └────────┬─────────┘
+                          │
+             ┌────────────┼────────────┐
+             ▼            ▼            ▼
+          BANK A        NBFC A       BANK B
+             │            │            │
+             └────────────┼────────────┘
+                          ▼
+                    LOAN OFFERS
+                          │
+                          ▼
+                  OFFER SELECTION
+                          │
+                          ▼
+                         KFS
+                          │
+                          ▼
+                 LENDER UNDERWRITING
+                          │
+                    ┌─────┴─────┐
+                    ▼           ▼
+                 APPROVED     REJECTED
+                    │
+                    ▼
+              CREDIT FACILITY
+                    │
+                    ▼
+                 GET CREDIT
+                    │
+                    ▼
+                  DRAWDOWN
+                    │
+                    ▼
+            CONSUMPTION CREDIT
+                    │
+                    ▼
+                REPAYMENT
+                    │
+                    ▼
+             CREDIT UTILIZATION
+                    │
+                    ▼
+             AVAILABLE CREDIT
 ```
 
-## Prerequisites (one-time)
+---
 
-- Node.js 18+ and MongoDB (or Docker + Docker Compose)
-- Copy `.env.example` → `server/.env` (defaults work out of the box)
+# Application Architecture
 
-## Run
-
-```powershell
-# Local
-cd vantage-credit
-npm run install:all     # installs client + server deps
-npm run dev             # API :5000 + client :3000
-
-# Docker
-docker compose up --build   # client :3000, API :5000, mongo :27017
+```text
+┌──────────────────────────────────────────────┐
+│                    CLIENT                    │
+│                 React + Vite                 │
+│                                              │
+│ Consumer │ DLA │ Lender │ Admin Dashboard   │
+└──────────────────────┬───────────────────────┘
+                       │
+                    REST API
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│                   SERVER                     │
+│               Node.js + Express              │
+│                                              │
+│ Authentication / RBAC                        │
+│ Application Management                       │
+│ Credit Marketplace                           │
+│ Credit Facility                              │
+│ Loan & Drawdown                              │
+│ Repayment                                    │
+│ AA / Consent                                 │
+│ KFS                                          │
+│ Compliance                                   │
+│ Credit Events                                │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│                  MONGODB                     │
+│                                              │
+│ Users                                        │
+│ Profiles                                     │
+│ Credit Accounts                              │
+│ Applications                                │
+│ Offers                                       │
+│ Lender Products                              │
+│ Loans                                        │
+│ Repayment Schedules                          │
+│ Consent Records                              │
+│ Credit Events                                │
+│ Compliance Logs                              │
+└──────────────────────────────────────────────┘
 ```
 
-The server auto-seeds on first boot: 3 users, 4 lender products, 3 applications.
+---
 
-## Demo Logins (seeded)
+# Core Workflow
 
-| Role   | Username | Password     | Scope                                              |
-|--------|----------|--------------|----------------------------------------------------|
-| DLA    | dla1     | Dla@123      | Submit apps, run engine, route                     |
-| LENDER | lender1  | Lender@123   | View apps routed to HDFC (L003), disburse          |
-| ADMIN  | admin    | Admin@123    | Full access, onboard lenders, admin stats          |
+## Consumer
 
-## Key API (base http://localhost:5000/api)
+```text
+Register
+   ↓
+Complete Profile
+   ↓
+AA / Required Consents
+   ↓
+CIBIL + Financial Data
+   ↓
+Enter Consumption Requirement
+   ↓
+Marketplace Matching
+   ↓
+View Offers
+   ↓
+Select Offer
+   ↓
+KFS
+   ↓
+Lender Approval
+   ↓
+Credit Facility
+   ↓
+Get Credit
+   ↓
+Loan Created
+   ↓
+Repayment Schedule
+   ↓
+Installments
+   ↓
+Loan Closed
+```
 
-- `POST /auth/login` — get JWT
-- `POST /applications` — DLA submits (aaConsent: true required)
-- `GET /applications` · `GET /applications/:id` — role-scoped lists
-- `POST /applications/:id/run-engine` — eligibility match vs all lenders
-- `POST /applications/:id/route` — generates + stores KFS, routes app
-- `POST /applications/:id/disburse` — lender callback (KFS gate)
-- `GET /applications/:id/kfs` — stored KFS document
-- `GET /lenders` · `POST /lenders` (admin) · `GET /lenders/:id/portfolio`
-- `GET /admin/stats` · `GET /admin/compliance`
-- `POST /bureau/pull` · `POST /aa/consent` · `POST /aa/fetch`
+## DLA / LSP
 
-## Compliance (enforced + logged to ComplianceLog)
+```text
+Consumer / Application
+        ↓
+       DLA
+        ↓
+ EmbedCredit APIs
+        ↓
+Eligibility & Marketplace
+        ↓
+   Lender Offers
+        ↓
+       KFS
+        ↓
+      Lender
+```
 
-1. KFS generated BEFORE routing, exactly once (409 on re-route).
-2. Disbursal blocked unless status=routed AND kfsGenerated=true (409).
-3. FLDG exposure ≤ 5% of lender's portfolio value (409 on breach).
-4. aaConsent: true mandatory on every DLA submission (400 otherwise).
-5. PAN is the only identity key — Aadhaar never stored.
-6. No payment processing — disbursal is a state change only.
+## Lender
 
-## Test Flow
+```text
+Application
+    ↓
+Eligibility
+    ↓
+Offer
+    ↓
+Underwriting
+    ↓
+Approve / Reject
+    ↓
+Credit Facility
+    ↓
+Disbursal
+    ↓
+Repayment
+```
 
-1. Login as `dla1` → New Application → enable AA consent → "Pull CIBIL" → submit.
-2. Credit Engine → select the new app → Run Engine → Route to top-scored lender
-   (KFS appears).
-3. Logout, login as `lender1` → see routed app → Disburse.
-4. Login as `admin` → Dashboard stats, Lenders (portfolio/FLDG), admin
-   compliance view.
+## Admin
+
+```text
+Platform Data
+     ↓
+Analytics
+     ↓
+Compliance
+     ↓
+FLDG Monitoring
+     ↓
+System Overview
+```
+
+> **Admin is read-only and cannot approve, reject, create, route, or disburse loans.**
+
+---
+
+# Consumption Credit
+
+Consumption credit is the core differentiator of EmbedCredit.
+
+An approved credit facility maintains:
+
+```text
+Credit Limit
+     │
+     ├── Available Credit
+     │
+     ├── Utilized Credit
+     │
+     └── Reserved Credit
+```
+
+Example:
+
+```text
+Credit Limit       ₹100,000
+Available          ₹100,000
+Utilized                 ₹0
+
+        ↓ Get Credit ₹20,000
+
+Credit Limit       ₹100,000
+Available           ₹80,000
+Utilized            ₹20,000
+```
+
+The consumer can then use the approved facility through a controlled **loan/drawdown** flow.
+
+---
+
+# Repayment Workflow
+
+```text
+₹20,000 Loan
+      ↓
+Repayment Schedule
+      ↓
+Installment Paid
+      ↓
+Principal Reduced
+      ↓
+Credit Utilization Reduced
+      ↓
+Available Credit Restored
+```
+
+Example:
+
+```text
+Credit Limit       ₹100,000
+Utilized Credit     ₹20,000
+Available Credit    ₹80,000
+
+        ↓ Repay Principal ₹3,000
+
+Utilized Credit     ₹17,000
+Available Credit    ₹83,000
+```
+
+The actual repayment funds do not pass through EmbedCredit.
+
+---
+
+# Compliance Architecture
+
+```text
+Consumer
+   ↓
+Explicit Consent
+   ↓
+AA / Bureau Data
+   ↓
+Purpose Validation
+   ↓
+Credit Matching
+   ↓
+KFS Generation
+   ↓
+Lender Routing
+   ↓
+Lender Decision
+   ↓
+Disbursal State
+   ↓
+Repayment
+```
+
+### Core Controls
+
+* **KFS must be generated before routing**
+* **Purpose-specific AA/data consent**
+* **5% FLDG cap enforcement**
+* **No Aadhaar storage**
+* **No money custody**
+* **Idempotent credit operations**
+* **Immutable credit events**
+* **Server-side financial validation**
+* **Role-based access control**
+* **Admin remains read-only**
+
+---
+
+# Final Architecture Vision
+
+```text
+                    ┌──────────────┐
+                    │   CONSUMER   │
+                    └──────┬───────┘
+                           │
+                     Credit Profile
+                           │
+                           ▼
+                 ┌───────────────────┐
+                 │   EMBEDCREDIT     │
+                 │                   │
+                 │ Marketplace       │
+                 │ Consent           │
+                 │ Credit Matching   │
+                 │ KFS               │
+                 │ Credit Facility   │
+                 │ Drawdown          │
+                 │ Repayment         │
+                 │ Compliance        │
+                 └───────┬───────────┘
+                         │
+              ┌──────────┴──────────┐
+              │                     │
+              ▼                     ▼
+         DLA / LSPs             BANKS / NBFCs
+              │                     │
+              └──────────┬──────────┘
+                         │
+                         ▼
+                   CREDIT ECOSYSTEM
+```
+
+---
+
+## Vision
+
+> **EmbedCredit is a non-custodial embedded credit marketplace that connects consumers and DLAs/LSPs with regulated lenders, enabling consumers to discover, access, consume, and repay credit through a compliant and auditable credit infrastructure.**

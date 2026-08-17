@@ -1,19 +1,18 @@
-// ── Seed script ──────────────────────────────────────────────────
-// Seeds the 4 lender products, 3 sample applications + their routes, and
-// borrower profiles — matching the frontend mock data exactly.
-// Idempotent by default: skips a collection if it already has documents.
-// `force` (npm run seed) drops and reseeds.
 const LenderProduct = require("./models/LenderProduct");
 const LoanApplication = require("./models/LoanApplication");
 const ApplicationRoute = require("./models/ApplicationRoute");
 const BorrowerProfile = require("./models/BorrowerProfile");
 const ComplianceLog = require("./models/ComplianceLog");
+const CreditProfile = require("./models/CreditProfile");
+const ConsentRecord = require("./models/ConsentRecord");
+const LoanIntent = require("./models/LoanIntent");
+const LoanOffer = require("./models/LoanOffer");
+const DLA = require("./models/DLA");
+const DLGPortfolio = require("./models/DLGPortfolio");
 const { runCreditEngine } = require("./services/creditEngine");
 const { generateKFS } = require("./services/kfsGenerator");
 const aaService = require("./services/aaService");
 
-// Same 4 lender products as the frontend LENDER_PRODUCTS, plus the
-// OCEN / AA / NACH flags from the Lenders page.
 const LENDERS = [
   {
     id: "L001",
@@ -22,12 +21,13 @@ const LENDERS = [
     minAmount: 10000,
     maxAmount: 500000,
     interestRate: 14.5,
+    APR: 15.0,
     tenureMonths: [3, 6, 12, 18],
     minCibilScore: 650,
     maxDti: 0.45,
     processingFee: 1.5,
     disbursalTime: "T+1",
-    supportedPurposes: ["personal", "consumer", "education"],
+    supportedPurposes: ["personal", "consumer", "education", "electronics", "shopping"],
     ocenEnabled: true,
     aaEnabled: true,
     nachEnabled: true,
@@ -39,6 +39,7 @@ const LENDERS = [
     minAmount: 50000,
     maxAmount: 2000000,
     interestRate: 16.0,
+    APR: 16.5,
     tenureMonths: [6, 12, 24, 36],
     minCibilScore: 680,
     maxDti: 0.5,
@@ -56,12 +57,13 @@ const LENDERS = [
     minAmount: 25000,
     maxAmount: 1500000,
     interestRate: 10.75,
+    APR: 11.25,
     tenureMonths: [12, 24, 36, 48, 60],
     minCibilScore: 720,
     maxDti: 0.4,
     processingFee: 1.0,
     disbursalTime: "T+3",
-    supportedPurposes: ["personal", "consumer", "medical"],
+    supportedPurposes: ["personal", "consumer", "medical", "electronics", "travel"],
     ocenEnabled: true,
     aaEnabled: true,
     nachEnabled: true,
@@ -73,19 +75,19 @@ const LENDERS = [
     minAmount: 5000,
     maxAmount: 200000,
     interestRate: 18.0,
+    APR: 18.5,
     tenureMonths: [3, 6, 9, 12],
     minCibilScore: 620,
     maxDti: 0.55,
     processingFee: 2.5,
     disbursalTime: "T+0",
-    supportedPurposes: ["personal", "consumer", "emergency"],
+    supportedPurposes: ["personal", "consumer", "emergency", "shopping"],
     ocenEnabled: false,
     aaEnabled: false,
     nachEnabled: true,
   },
 ];
 
-// Same 3 sample applications as the frontend INITIAL_APPLICATIONS.
 const APPLICATIONS = [
   {
     id: "APP-001",
@@ -99,7 +101,7 @@ const APPLICATIONS = [
     monthlyIncome: 75000,
     monthlyObligations: 15000,
     dlaId: "DLA-001",
-    status: "routed",
+    status: "ROUTED",
     routedTo: "L003",
     routedAt: "2024-01-15T10:23:00Z",
     kfsGenerated: true,
@@ -210,6 +212,125 @@ async function seedApplicationsAndRoutes() {
   console.log(`[seed] inserted ${APPLICATIONS.length} applications, routes, and profiles`);
 }
 
+async function seedConsumerData() {
+  const userIdKey = "USR-001";
+  if (await CreditProfile.countDocuments({ userId: userIdKey })) {
+    return;
+  }
+
+  const cp = await CreditProfile.create({
+    userId: userIdKey,
+    cibilScore: 750,
+    monthlyIncome: 75000,
+    monthlyObligations: 15000,
+    dti: 0.2,
+    employmentType: "salaried",
+    bureauStatus: "PULLED",
+    bureauLastPulledAt: new Date(),
+    aaStatus: "CONNECTED",
+    creditUtilization: 15,
+    profileCompleteness: 85,
+    lastEvaluatedAt: new Date(),
+  });
+
+  const exp1 = new Date();
+  exp1.setFullYear(exp1.getFullYear() + 1);
+
+  await ConsentRecord.create({
+    id: "CNS-001",
+    userId: userIdKey,
+    consentType: "AA_DATA",
+    purpose: "Bank statement analysis for credit assessment",
+    provider: "Finvu Account Aggregator",
+    status: "ACTIVE",
+    version: "1.0",
+    grantedAt: new Date(),
+    expiresAt: exp1,
+    metadata: { scope: ["BANK_ACCOUNTS", "CREDIT_INFORMATION"] },
+  });
+
+  const exp2 = new Date();
+  exp2.setDate(exp2.getDate() + 30);
+
+  const intent = await LoanIntent.create({
+    id: "INT-001",
+    userId: userIdKey,
+    purpose: "Electronics",
+    requestedAmount: 80000,
+    preferredTenure: 12,
+    status: "OFFERS_GENERATED",
+    expiresAt: exp2,
+  });
+
+  const exp3 = new Date();
+  exp3.setDate(exp3.getDate() + 14);
+
+  await LoanOffer.create({
+    id: "OFFER-001",
+    loanIntentId: intent.id,
+    lenderProductId: "L001",
+    lenderId: "L001",
+    lenderName: "CreditSaison India",
+    amount: 80000,
+    interestRate: 14.5,
+    APR: 15.0,
+    tenure: 12,
+    EMI: 7200,
+    processingFee: 1200,
+    totalRepayment: 86400,
+    disbursalTime: "T+1",
+    eligibilityReasons: ["✓ Requested amount within limits", "✓ CIBIL > 650", "✓ DTI < 45%", "✓ Purpose supported"],
+    status: "GENERATED",
+    expiresAt: exp3,
+  });
+
+  await LoanOffer.create({
+    id: "OFFER-002",
+    loanIntentId: intent.id,
+    lenderProductId: "L003",
+    lenderId: "L003",
+    lenderName: "HDFC Bank",
+    amount: 80000,
+    interestRate: 10.75,
+    APR: 11.25,
+    tenure: 12,
+    EMI: 7062,
+    processingFee: 800,
+    totalRepayment: 84744,
+    disbursalTime: "T+3",
+    eligibilityReasons: ["✓ Prime borrower tier", "✓ Low leverage ratio", "✓ Pre-approved product"],
+    status: "GENERATED",
+    expiresAt: exp3,
+  });
+
+  // Seed DLA Partner
+  await DLA.create({
+    id: "DLA-001",
+    name: "Vantage Native DLA",
+    apiKey: "dla_live_key_9988",
+    apiSecret: "sec_998877665544",
+    status: "ACTIVE",
+    webhookUrl: "http://localhost:5000/api/mock-dla-webhook",
+  });
+
+  // Seed DLG Portfolios
+  for (const l of LENDERS) {
+    await DLGPortfolio.create({
+      lenderId: l.id,
+      lenderProductId: l.id,
+      portfolioOutstanding: 1000000,
+      disbursedOutstanding: 500000,
+      dlgAmount: 25000,
+      dlgCap: 0.05,
+      utilization: 50,
+      availableCapacity: 25000,
+      status: "COMPLIANT",
+    });
+  }
+
+  console.log("[seed] seeded consumer credit profile, DLA partner, DLG portfolios, consent, intent, and offers");
+}
+
 async function seedDatabase(force = false) {
   if (force) {
     await Promise.all([
@@ -218,11 +339,18 @@ async function seedDatabase(force = false) {
       ApplicationRoute.deleteMany({}),
       BorrowerProfile.deleteMany({}),
       ComplianceLog.deleteMany({}),
+      CreditProfile.deleteMany({}),
+      ConsentRecord.deleteMany({}),
+      LoanIntent.deleteMany({}),
+      LoanOffer.deleteMany({}),
+      DLA.deleteMany({}),
+      DLGPortfolio.deleteMany({}),
     ]);
     console.log("[seed] force reseed — cleared collections");
   }
   await seedLenders();
   await seedApplicationsAndRoutes();
+  await seedConsumerData();
 }
 
 module.exports = { seedDatabase };

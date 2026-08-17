@@ -6,24 +6,40 @@ function authenticate(req, res, next) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : null;
   if (!token) {
-    return res.status(401).json({ error: "Authentication required" });
+    return res.status(401).json({
+      success: false,
+      error: { code: "UNAUTHORIZED", message: "Authentication required" },
+      requestId: req.requestId,
+    });
   }
   try {
     req.user = jwt.verify(token, process.env.JWT_SECRET || "vantage_credit_secret_key_2026");
     next();
   } catch (e) {
-    return res.status(401).json({ error: "Invalid or expired token" });
+    return res.status(401).json({
+      success: false,
+      error: { code: "UNAUTHORIZED", message: "Invalid or expired authorization token" },
+      requestId: req.requestId,
+    });
   }
 }
 
 // Require one of the listed roles. Must run after authenticate().
 function requireRole(...roles) {
   return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ error: "Authentication required" });
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: { code: "UNAUTHORIZED", message: "Authentication required" },
+        requestId: req.requestId,
+      });
+    }
     if (!roles.includes(req.user.role)) {
-      return res
-        .status(403)
-        .json({ error: `Requires role: ${roles.join(" / ")}` });
+      return res.status(403).json({
+        success: false,
+        error: { code: "FORBIDDEN", message: `Requires role: ${roles.join(" / ")}` },
+        requestId: req.requestId,
+      });
     }
     next();
   };

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Fragment } from "react";
 
 // ─── THEME HOOK & PERSISTENCE ─────────────────────────────────────
 function useTheme() {
@@ -615,6 +615,7 @@ function LoginPage({ onLogin, theme, onToggleTheme }) {
   };
 
   const quick = [
+    { u: "user1", p: "User@123", label: "CONSUMER", hint: "Profile & Intent" },
     { u: "dla1", p: "Dla@123", label: "DLA", hint: "Submit & Route" },
     { u: "lender1", p: "Lender@123", label: "LENDER (HDFC)", hint: "Disburse & Portfolio" },
     { u: "admin", p: "Admin@123", label: "ADMIN", hint: "Full Stats & Compliance" },
@@ -1256,15 +1257,11 @@ function CreditEnginePage({ applications, lenders, onRoute }) {
                     ["Borrower Name", kfs.borrowerName],
                     ["Loan Principal", formatINR(kfs.loanAmount)],
                     ["Interest Rate", `${kfs.interestRate}% p.a.`],
-                    ["Annual Percentage Rate (APR)", `${kfs.annualPercentageRate}% p.a.`],
+                  ["Annual Percentage Rate (APR)", `${kfs.annualPercentageRate}% p.a.`],
                     ["Tenure", `${kfs.tenure} months`],
                     ["Monthly EMI", formatINR(kfs.emi)],
                     ["Total Repayable", formatINR(kfs.totalPayable)],
                     ["Total Interest Payable", formatINR(kfs.totalInterest)],
-                    ["Processing Fee", formatINR(kfs.processingFee)],
-                    ["Disbursal Timeline", kfs.disbursalTime],
-                    ["Prepayment Charges", kfs.prepaymentCharges],
-                    ["Overdue Penalties", kfs.penal],
                   ].map(([k, v]) => (
                     <div key={k} className="kfs-row">
                       <span className="kfs-key">{k}</span>
@@ -1286,13 +1283,30 @@ function CreditEnginePage({ applications, lenders, onRoute }) {
 
 // ─── ROUTED LOANS & DISBURSAL PAGE (LENDER ROLE) ────────────────────
 function RoutedLoansPage({ applications, user, onRefresh }) {
-  const routedApps = applications.filter((a) => a.status === "routed" || a.status === "disbursed");
   const [selectedApp, setSelectedApp] = useState(null);
   const [kfsData, setKfsData] = useState(null);
   const [loadingKfs, setLoadingKfs] = useState(false);
-  const [disbursing, setDisbursing] = useState(false);
-  const [actionMessage, setActionMessage] = useState(null);
+  const [disburs, setDisburs] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [actionMessage, setActionMessage] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectionReasonCode, setRejectionReasonCode] = useState("CREDIT_CRITERIA_NOT_MET");
+  const [rejectionReasonText, setRejectionReasonText] = useState("");
+
+  const isLenderRole = user.role === "LENDER";
+  const lenderId = user.lenderId || "L003";
+
+  const routedApps = applications.filter((a) => {
+    const matchesLender = user.role === "ADMIN" || a.routedTo === lenderId;
+    if (!matchesLender) return false;
+    if (statusFilter === "ALL") return true;
+    if (statusFilter === "PENDING") return ["routed", "ROUTED", "pending_review"].includes(a.status);
+    if (statusFilter === "APPROVED") return a.status === "APPROVED";
+    if (statusFilter === "REJECTED") return ["rejected", "REJECTED"].includes(a.status);
+    if (statusFilter === "DISBURSED") return ["disbursed", "DISBURSED"].includes(a.status);
+    return true;
+  });
 
   const selectApp = async (app) => {
     setSelectedApp(app);
@@ -1310,9 +1324,48 @@ function RoutedLoansPage({ applications, user, onRefresh }) {
     }
   };
 
+  const handleApprove = async () => {
+    if (!selectedApp) return;
+    setDisburs(true);
+    setErrorMessage(null);
+    setActionMessage(null);
+    try {
+      const res = await api(`/applications/${selectedApp.id}/approve`, { method: "POST" });
+      setActionMessage(res.message);
+      await onRefresh();
+      setSelectedApp((prev) => ({ ...prev, status: "APPROVED" }));
+    } catch (e) {
+      setErrorMessage(e.message);
+    } finally {
+      setDisburs(false);
+    }
+  };
+
+  const handleRejectSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedApp) return;
+    setDisburs(true);
+    setErrorMessage(null);
+    setActionMessage(null);
+    try {
+      const res = await api(`/applications/${selectedApp.id}/reject`, {
+        method: "POST",
+        body: JSON.stringify({ rejectionReasonCode, rejectionReasonText }),
+      });
+      setActionMessage(res.message);
+      setRejectModalOpen(false);
+      await onRefresh();
+      setSelectedApp((prev) => ({ ...prev, status: "REJECTED", rejectionReasonCode, declineExplanation: res.application.declineExplanation }));
+    } catch (e) {
+      setErrorMessage(e.message);
+    } finally {
+      setDisburs(false);
+    }
+  };
+
   const handleDisburse = async () => {
     if (!selectedApp) return;
-    setDisbursing(true);
+    setDisburs(true);
     setErrorMessage(null);
     setActionMessage(null);
     try {
@@ -1323,34 +1376,56 @@ function RoutedLoansPage({ applications, user, onRefresh }) {
     } catch (e) {
       setErrorMessage(e.message);
     } finally {
-      setDisbursing(false);
+      setDisburs(false);
     }
   };
 
   return (
     <div>
-      <div className="section-header">
-        <div className="section-title">Routed Loans Portal — {user.lenderId || "Lender"}</div>
-        <span className="badge badge-blue">{routedApps.length} Assigned Applications</span>
-      </div>
-
-      <div className="compliance-strip">
-        <span>⚡</span>
+      <div className="section-header mb-3">
         <div>
-          <strong>Lender Execution Gate:</strong> Disbursal is blocked server-side unless application status is 'routed' AND a valid Key Fact Statement (KFS) has been generated. Disbursal records the state change — funds disburse directly to borrower.
+          <div className="section-title">Lender Portal — Underwriting & Disbursal Hub ({lenderId})</div>
+          <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
+            Review assigned loan applications, perform credit approval/rejection, & record disbursals
+          </div>
         </div>
+        <span className="badge badge-blue">{routedApps.length} Applications</span>
       </div>
 
-      {actionMessage && <div className="success-banner"><span>{actionMessage}</span><button className="close-btn" onClick={() => setActionMessage(null)}>✕</button></div>}
-      {errorMessage && <div className="error-banner"><span>{errorMessage}</span><button className="close-btn" onClick={() => setErrorMessage(null)}>✕</button></div>}
+      {!isLenderRole && (
+        <div className="card mb-4" style={{ border: "1px solid var(--amber)", background: "var(--amber-soft)" }}>
+          <div style={{ fontWeight: 700, color: "var(--amber)", fontSize: 14 }}>
+            ⚠️ Admin Restricted View: Underwriting Decisions Mandatory by Lender
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
+            Under RBI Digital Lending 2022 guidelines, credit decisions (Approve/Reject) must be performed by the designated Bank/NBFC lending partner. Administrator accounts cannot override credit decisions.
+          </div>
+        </div>
+      )}
+
+      {/* Filter Tabs */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+        {["ALL", "PENDING", "APPROVED", "REJECTED", "DISBURSED"].map((f) => (
+          <button
+            key={f}
+            className={`btn btn-sm ${statusFilter === f ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => setStatusFilter(f)}
+          >
+            {f === "ALL" ? "All Applications" : f}
+          </button>
+        ))}
+      </div>
+
+      {actionMessage && <div className="success-banner mb-3"><span>{actionMessage}</span><button className="close-btn" onClick={() => setActionMessage(null)}>✕</button></div>}
+      {errorMessage && <div className="error-banner mb-3"><span>{errorMessage}</span><button className="close-btn" onClick={() => setErrorMessage(null)}>✕</button></div>}
 
       <div className="grid-2" style={{ alignItems: "start" }}>
         <div>
-          <div className="card-title" style={{ marginBottom: 12 }}>Routed Applications</div>
+          <div className="card-title" style={{ marginBottom: 12 }}>Routed Applications ({routedApps.length})</div>
           {routedApps.length === 0 ? (
             <div className="empty card">
               <div className="empty-icon">📭</div>
-              <div className="empty-text">No routed applications for this lender</div>
+              <div className="empty-text">No matching applications for this filter</div>
             </div>
           ) : (
             routedApps.map((app) => (
@@ -1360,16 +1435,17 @@ function RoutedLoansPage({ applications, user, onRefresh }) {
                 style={{
                   marginBottom: 10,
                   cursor: "pointer",
-                  border: selectedApp?.id === app.id ? `1px solid var(--primary)` : undefined,
+                  border: selectedApp?.id === app.id ? `2px solid var(--primary)` : "1px solid var(--border-color)",
+                  background: "var(--bg-surface)",
                 }}
                 onClick={() => selectApp(app)}
               >
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="td-primary" style={{ fontWeight: 600, marginBottom: 2 }}>{app.borrowerName}</div>
-                    <div className="text-sm text-muted">{app.id} · {formatINR(app.amount)} · {app.tenure}M</div>
-                  </div>
+                <div className="flex justify-between items-center mb-1">
+                  <div className="td-primary" style={{ fontWeight: 700 }}>{app.borrowerName}</div>
                   <StatusBadge status={app.status} />
+                </div>
+                <div className="text-sm text-muted">
+                  {app.id} · {formatINR(app.amount)} · {app.tenure}M · CIBIL: {app.cibilScore}
                 </div>
               </div>
             ))
@@ -1380,46 +1456,78 @@ function RoutedLoansPage({ applications, user, onRefresh }) {
           {!selectedApp ? (
             <div className="empty card">
               <div className="empty-icon">📄</div>
-              <div className="empty-text">Select an application</div>
-              <div className="empty-sub">Inspect stored KFS and trigger disbursal callback</div>
+              <div className="empty-text">Select an application to review</div>
+              <div className="empty-sub">Inspect borrower financials, KFS snapshot, and perform decision actions</div>
             </div>
           ) : (
             <div className="card">
-              <div className="flex justify-between items-center" style={{ marginBottom: 14 }}>
+              <div className="flex justify-between items-center mb-3">
                 <div>
-                  <div className="card-title" style={{ fontSize: 16 }}>{selectedApp.borrowerName}</div>
+                  <div className="card-title" style={{ fontSize: 18 }}>{selectedApp.borrowerName}</div>
                   <div className="text-sm text-muted">{selectedApp.id} · PAN: {selectedApp.pan}</div>
                 </div>
                 <StatusBadge status={selectedApp.status} />
               </div>
 
-              {selectedApp.status === "routed" && (
-                <div style={{ marginBottom: 18 }}>
-                  <button className="btn btn-success w-full" onClick={handleDisburse} disabled={disbursing}>
-                    {disbursing ? "Executing Disbursal…" : "✓ Disburse Loan (Record State)"}
+              {/* Borrower Financial Metrics */}
+              <div style={{ background: "var(--bg-surface-elevated)", padding: 12, borderRadius: "var(--radius-md)", marginBottom: 16 }}>
+                <div className="grid-2 text-sm gap-2">
+                  <div>Requested Amount: <strong>{formatINR(selectedApp.amount)}</strong></div>
+                  <div>Tenure: <strong>{selectedApp.tenure} Months</strong></div>
+                  <div>CIBIL Bureau Score: <strong>{selectedApp.cibilScore}</strong></div>
+                  <div>Monthly Income: <strong>{formatINR(selectedApp.monthlyIncome)}</strong></div>
+                  <div>Monthly Obligations: <strong>{formatINR(selectedApp.monthlyObligations)}</strong></div>
+                  <div>Purpose: <strong style={{ textTransform: "capitalize" }}>{selectedApp.purpose}</strong></div>
+                  <div>AA Consent: <span className="badge badge-green">✓ Active</span></div>
+                  <div>KFS Status: <span className={`badge ${selectedApp.kfsGenerated ? "badge-green" : "badge-amber"}`}>{selectedApp.kfsGenerated ? "✓ Generated" : "Pending"}</span></div>
+                </div>
+              </div>
+
+              {/* Lender Decision Action Controls */}
+              {isLenderRole && ["routed", "ROUTED", "pending_review"].includes(selectedApp.status) && (
+                <div style={{ display: "flex", gap: 10, marginBottom: 18 }}>
+                  <button className="btn btn-success" style={{ flex: 1 }} onClick={handleApprove} disabled={disburs}>
+                    ✓ Approve Loan
                   </button>
-                  <div className="form-hint" style={{ textAlign: "center", marginTop: 8 }}>
-                    Direct transfer from {user.lenderId} bank account → Borrower account.
+                  <button className="btn btn-secondary" style={{ flex: 1, borderColor: "var(--red)", color: "var(--red)" }} onClick={() => setRejectModalOpen(true)} disabled={disburs}>
+                    ✗ Reject Loan
+                  </button>
+                </div>
+              )}
+
+              {isLenderRole && ["APPROVED", "accepted"].includes(selectedApp.status) && (
+                <div style={{ marginBottom: 18 }}>
+                  <button className="btn btn-primary w-full" onClick={handleDisburse} disabled={disburs}>
+                    {disburs ? "Executing Disbursal…" : "⚡ Execute Disbursal (Record State)"}
+                  </button>
+                  <div className="form-hint" style={{ textAlign: "center", marginTop: 6 }}>
+                    Direct transfer from {lenderId} bank account → Borrower account.
                   </div>
                 </div>
               )}
 
-              {selectedApp.status === "disbursed" && (
-                <div className="success-banner" style={{ marginBottom: 18 }}>
-                  <span>✓ Loan disbursed on platform. Funds transferred directly to borrower.</span>
+              {selectedApp.status === "REJECTED" && (
+                <div className="card mb-3" style={{ border: "1px solid var(--red-border)", background: "var(--red-soft)" }}>
+                  <div style={{ fontWeight: 700, color: "var(--red)", fontSize: 13, marginBottom: 4 }}>
+                    Application Declined by Lender ({selectedApp.rejectionReasonCode || "REJECTED"})
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-primary)" }}>
+                    {selectedApp.declineExplanation || "Application did not meet lender risk parameters."}
+                  </div>
                 </div>
               )}
 
+              {/* KFS Snapshot Panel */}
               {loadingKfs ? (
-                <div className="empty" style={{ padding: 24 }}>
+                <div className="empty" style={{ padding: 20 }}>
                   <div className="spinner" style={{ margin: "0 auto 8px" }} />
-                  <div>Loading stored KFS document…</div>
+                  <div>Loading stored KFS snapshot…</div>
                 </div>
               ) : kfsData ? (
                 <div className="kfs-panel">
                   <div className="kfs-title">
-                    <span>Key Fact Statement (KFS)</span>
-                    <span className="badge badge-green">Verified</span>
+                    <span>Key Fact Statement (KFS) Snapshot</span>
+                    <span className="badge badge-green">Immutable</span>
                   </div>
                   {[
                     ["Borrower", kfsData.borrowerName],
@@ -1445,6 +1553,49 @@ function RoutedLoansPage({ applications, user, onRefresh }) {
           )}
         </div>
       </div>
+
+      {/* Structured Rejection Modal */}
+      {rejectModalOpen && (
+        <div className="mobile-overlay mobile-open" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="card" style={{ width: "90%", maxWidth: 480, background: "var(--bg-surface)", zIndex: 1000 }}>
+            <div className="section-header mb-3">
+              <div className="section-title">Record Rejection Reason</div>
+              <button className="btn btn-sm btn-ghost" onClick={() => setRejectModalOpen(false)}>✕</button>
+            </div>
+            <form onSubmit={handleRejectSubmit}>
+              <div className="form-group mb-3">
+                <label className="form-label">Structured Rejection Reason</label>
+                <select className="form-select" value={rejectionReasonCode} onChange={(e) => setRejectionReasonCode(e.target.value)}>
+                  <option value="INSUFFICIENT_INCOME">Insufficient Income</option>
+                  <option value="CREDIT_CRITERIA_NOT_MET">Credit Bureau Criteria Not Met</option>
+                  <option value="HIGH_OBLIGATIONS">Existing Obligations Too High</option>
+                  <option value="DOCUMENTATION_ISSUE">Documentation Verification Issue</option>
+                  <option value="PRODUCT_UNAVAILABLE">Product / Tenure Unavailable</option>
+                  <option value="OTHER">Other Lender Specific Reason</option>
+                </select>
+              </div>
+
+              <div className="form-group mb-4">
+                <label className="form-label">Underwriter Internal Notes (Optional)</label>
+                <textarea
+                  className="form-input"
+                  rows={3}
+                  value={rejectionReasonText}
+                  onChange={(e) => setRejectionReasonText(e.target.value)}
+                  placeholder="Additional risk notes for internal audit..."
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setRejectModalOpen(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" style={{ background: "var(--red)", borderColor: "var(--red)" }} disabled={disburs}>
+                  {disburs ? "Submitting..." : "Confirm Rejection"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1564,24 +1715,66 @@ function LenderPortfolioPage({ user }) {
 // ─── ADMIN STATS PAGE (ADMIN ROLE) ──────────────────────────────────
 function AdminStatsPage() {
   const [stats, setStats] = useState(null);
+  const [dlas, setDlas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [actionMsg, setActionMsg] = useState(null);
+  const [sandboxResult, setSandboxResult] = useState(null);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [sData, dlaData] = await Promise.all([
+        api("/admin/stats"),
+        api("/admin/dla-partners").catch(() => []),
+      ]);
+      setStats(sData);
+      setDlas(dlaData);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      try {
-        const data = await api("/admin/stats");
-        if (mounted) setStats(data);
-      } catch (e) {
-        if (mounted) setError(e.message);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
+    loadData();
   }, []);
+
+  const handleRegenerateKey = async (dlaId) => {
+    setActionMsg(null);
+    try {
+      const res = await api(`/admin/dla-partners/${dlaId}/regenerate-key`, { method: "POST" });
+      setActionMsg(`API Key regenerated for ${res.name}: ${res.newApiKey}`);
+      await loadData();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleTestWebhook = async (dlaId) => {
+    setActionMsg(null);
+    try {
+      const res = await api(`/admin/dla-partners/${dlaId}/test-webhook`, { method: "POST" });
+      setActionMsg(`Test Webhook Dispatched to DLA ${dlaId}. Event ID: ${res.webhookLog?.eventId}`);
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleRunSandbox = async () => {
+    setSandboxResult(null);
+    try {
+      const res = await api("/v1/integrations/eligibility", {
+        method: "POST",
+        headers: { "X-API-Key": "dla_live_key_9988", "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: 75000, tenure: 12, cibilScore: 740, monthlyIncome: 65000 }),
+      });
+      setSandboxResult(res);
+    } catch (e) {
+      setSandboxResult({ error: e.message });
+    }
+  };
 
   if (loading) {
     return (
@@ -1597,9 +1790,11 @@ function AdminStatsPage() {
   return (
     <div>
       <div className="section-header">
-        <div className="section-title">Marketplace Platform Analytics</div>
+        <div className="section-title">Marketplace Operations & DLA Partner Control Panel</div>
         <span className="badge badge-green">Live System Metrics</span>
       </div>
+
+      {actionMsg && <div className="success-banner mb-3"><span>{actionMsg}</span><button className="close-btn" onClick={() => setActionMsg(null)}>✕</button></div>}
 
       <div className="stats-grid">
         <div className="stat-card">
@@ -1621,6 +1816,69 @@ function AdminStatsPage() {
           <div className="stat-label">Total Volume Disbursed</div>
           <div className="stat-value">{formatINR(stats.volume)}</div>
           <div className="stat-delta">Gross Volume</div>
+        </div>
+      </div>
+
+      {/* DLA Partner Management Panel */}
+      <div className="card mb-4">
+        <div className="section-header mb-3">
+          <div>
+            <div className="section-title">Third-Party DLA / LSP Integration Management</div>
+            <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
+              Manage API keys, rate limits, webhook delivery status, and test sandbox APIs
+            </div>
+          </div>
+          <button className="btn btn-sm btn-primary" onClick={handleRunSandbox}>⚡ Run Sandbox API Test</button>
+        </div>
+
+        {sandboxResult && (
+          <div className="card mb-3" style={{ background: "var(--bg-surface-elevated)", border: "1px solid var(--primary)" }}>
+            <div className="flex justify-between items-center mb-2">
+              <div style={{ fontWeight: 700, fontSize: 13, color: "var(--primary)" }}>Sandbox Test Result (/api/v1/integrations/eligibility)</div>
+              <button className="btn btn-sm btn-ghost" onClick={() => setSandboxResult(null)}>✕</button>
+            </div>
+            <pre style={{ fontSize: 11, fontFamily: "var(--font-mono)", background: "var(--bg-main)", padding: 10, borderRadius: 4, overflowX: "auto" }}>
+              {JSON.stringify(sandboxResult, null, 2)}
+            </pre>
+          </div>
+        )}
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>DLA Partner</th>
+                <th>API Key</th>
+                <th>Status</th>
+                <th>Rate Limit</th>
+                <th>Webhook URL</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dlas.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-muted" style={{ padding: 12 }}>DLA-001 (Vantage Native DLA) · Key: dla_live_key_9988 · Active</td>
+                </tr>
+              ) : (
+                dlas.map((d) => (
+                  <tr key={d.id}>
+                    <td className="td-primary" style={{ fontWeight: 600 }}>{d.name} ({d.id})</td>
+                    <td className="td-mono text-sm">{d.apiKey}</td>
+                    <td><span className={`badge ${d.status === "ACTIVE" ? "badge-green" : "badge-red"}`}>{d.status}</span></td>
+                    <td className="td-mono">{d.rateLimit || 100} req/min</td>
+                    <td className="td-mono text-muted text-sm">{d.webhookUrl || "Not configured"}</td>
+                    <td>
+                      <div className="flex gap-2">
+                        <button className="btn btn-sm btn-ghost" onClick={() => handleRegenerateKey(d.id)}>Regen Key</button>
+                        <button className="btn btn-sm btn-secondary" onClick={() => handleTestWebhook(d.id)}>Test Webhook</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -2042,6 +2300,698 @@ function LendersPage({ lenders, loading }) {
   );
 }
 
+// ─── CONSUMER PAGES ───────────────────────────────────────────────
+
+function ConsumerDashboardPage({ user, onNavigate }) {
+  const [creditProfile, setCreditProfile] = useState(null);
+  const [intents, setIntents] = useState([]);
+  const [offers, setOffers] = useState([]);
+  const [myLoans, setMyLoans] = useState([]);
+
+  const loadData = async () => {
+    try {
+      const [cp, intRes, loanRes] = await Promise.all([
+        api("/credit-profile").catch(() => null),
+        api("/loan-intents").catch(() => []),
+        api("/my-loans").catch(() => []),
+      ]);
+      setCreditProfile(cp);
+
+      const parsedIntents = Array.isArray(intRes) ? intRes : (intRes?.intents || intRes?.data || []);
+      setIntents(parsedIntents);
+
+      const parsedLoans = Array.isArray(loanRes) ? loanRes : (loanRes?.apps || loanRes?.loans || loanRes?.data || []);
+      setMyLoans(parsedLoans);
+
+      if (parsedIntents.length > 0) {
+        const activeIntent = parsedIntents[0];
+        const offRes = await api(`/loan-intents/${activeIntent.id}/offers`).catch(() => []);
+        const parsedOffers = Array.isArray(offRes) ? offRes : (offRes?.offers || offRes?.data || []);
+        setOffers(parsedOffers);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const categories = [
+    { id: "Shopping", icon: "🛒", label: "Shopping" },
+    { id: "Electronics", icon: "📱", label: "Electronics" },
+    { id: "Travel", icon: "✈️", label: "Travel" },
+    { id: "Healthcare", icon: "🩺", label: "Healthcare" },
+    { id: "Education", icon: "🎓", label: "Education" },
+    { id: "Home Improvement", icon: "🏠", label: "Home" },
+    { id: "Personal", icon: "👤", label: "Personal" },
+    { id: "Other", icon: "💡", label: "Other" },
+  ];
+
+  const safeOffers = Array.isArray(offers) ? offers : [];
+  const safeLoans = Array.isArray(myLoans) ? myLoans : [];
+
+  return (
+    <div>
+      {/* Welcome Banner */}
+      <div className="card mb-4" style={{ background: "linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(16,185,129,0.08) 100%)", borderColor: "var(--primary-soft)" }}>
+        <div className="flex justify-between items-center flex-wrap gap-4">
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>Welcome back, {user.fullName || user.username}!</div>
+            <div style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 4 }}>
+              Consumer Credit Profile & Marketplace Dashboard · PAN: {user.pan ? `•••••${user.pan.slice(-4)}` : "Not verified"}
+            </div>
+          </div>
+          <button className="btn btn-primary" onClick={() => onNavigate("get-credit")}>
+            ⚡ Get Credit
+          </button>
+        </div>
+      </div>
+
+      {/* Progress Flow Stepper */}
+      <div className="card mb-4">
+        <div className="section-title mb-2" style={{ fontSize: 13, textTransform: "uppercase", letterSpacing: 0.6, color: "var(--text-muted)" }}>
+          Consumption Credit Application Stepper
+        </div>
+        <div className="flow" style={{ margin: 0 }}>
+          {[
+            { step: 1, label: "Profile", sub: "Verified Identity" },
+            { step: 2, label: "Consent", sub: "AA Active" },
+            { step: 3, label: "Credit Data", sub: `CIBIL ${creditProfile?.cibilScore || 750}` },
+            { step: 4, label: "Find Credit", sub: "Intent Category" },
+            { step: 5, label: "Compare", sub: `${safeOffers.length} Offers` },
+            { step: 6, label: "KFS", sub: "Key Fact Statement" },
+            { step: 7, label: "Lender Review", sub: "Underwriting" },
+            { step: 8, label: "Loan", sub: "Disbursed" },
+          ].map((item, idx) => (
+            <Fragment key={item.label}>
+              <div className={`flow-node ${idx <= 4 ? "flow-node-active" : ""}`}>
+                <div style={{ fontWeight: 700 }}>{item.label}</div>
+                <div className="flow-sub">{item.sub}</div>
+              </div>
+              {idx < 7 && <div className="flow-arrow">→</div>}
+            </Fragment>
+          ))}
+        </div>
+      </div>
+
+      {/* Credit Readiness System Card */}
+      <div className="card mb-4" style={{ border: "1px solid var(--primary-glow)", background: "var(--bg-surface)" }}>
+        <div className="flex justify-between items-center flex-wrap gap-3 mb-3">
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>Credit Readiness Score</div>
+            <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
+              Completeness checks required for instant marketplace underwriting
+            </div>
+          </div>
+          <span className="badge badge-green" style={{ fontSize: 13, padding: "6px 12px" }}>
+            92% Credit Ready · 1 Action Remaining
+          </span>
+        </div>
+
+        <div className="gauge-container" style={{ height: 10, marginBottom: 14 }}>
+          <div className="gauge-fill" style={{ width: "92%", background: "var(--green)" }} />
+        </div>
+
+        <div className="grid-3 text-sm gap-3">
+          <div className="flex items-center gap-2">
+            <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
+            <span>Mobile Verified (9876543210)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
+            <span>PAN Identity Verified</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
+            <span>Net Income & Obligations Added</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
+            <span>Account Aggregator (AA) Active</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span style={{ color: "var(--green)", fontWeight: 700 }}>✓</span>
+            <span>CIBIL Bureau Score Pulled ({creditProfile?.cibilScore || 750})</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span style={{ color: "var(--amber)", fontWeight: 700 }}>⏳</span>
+            <span style={{ color: "var(--amber)", fontWeight: 600 }}>1 Action: Bank Statement Refresh</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Category Intent Cards */}
+      <div className="card mb-4">
+        <div className="section-header mb-3">
+          <div>
+            <div className="section-title">What do you need credit for?</div>
+            <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>Select a consumption category to get pre-approved credit offers</div>
+          </div>
+          <button className="btn btn-sm btn-secondary" onClick={() => onNavigate("get-credit")}>View All Categories →</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10 }}>
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => onNavigate("get-credit", { purpose: c.id })}
+              className="card"
+              style={{
+                padding: "16px 10px",
+                textAlign: "center",
+                cursor: "pointer",
+                border: "1px solid var(--border-color)",
+                background: "var(--bg-surface-elevated)",
+                transition: "all 0.2s ease"
+              }}
+            >
+              <div style={{ fontSize: 24, marginBottom: 4 }}>{c.icon}</div>
+              <div style={{ fontWeight: 600, fontSize: 12, color: "var(--text-primary)" }}>{c.label}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Available Credit Offers Preview */}
+      <div className="card mb-4">
+        <div className="section-header">
+          <div>
+            <div className="section-title">Available Credit Offers</div>
+            <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
+              {offers.length} eligible lender product(s) matching your credit need
+            </div>
+          </div>
+          {offers.length > 0 && (
+            <button className="btn btn-sm btn-primary" onClick={() => onNavigate("my-offers")}>
+              Compare & Select Offers →
+            </button>
+          )}
+        </div>
+
+        {safeOffers.length === 0 ? (
+          <div className="empty" style={{ padding: "20px 0" }}>
+            <div className="empty-text">No active credit offers generated yet.</div>
+            <button className="btn btn-sm btn-primary" style={{ marginTop: 10 }} onClick={() => onNavigate("get-credit")}>
+              Get Credit Offers →
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14, marginTop: 12 }}>
+            {safeOffers.slice(0, 3).map((off) => (
+              <div key={off.id} className="card" style={{ border: "1px solid var(--border-color)", background: "var(--bg-surface)" }}>
+                <div className="flex justify-between items-center mb-2">
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>{off.lenderName}</div>
+                  <span className="badge badge-blue">{off.disbursalTime}</span>
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "var(--primary-text)", margin: "6px 0" }}>
+                  ₹{off.amount?.toLocaleString("en-IN")}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 10 }}>
+                  Interest: <strong>{off.interestRate}% p.a.</strong> · APR: <strong>{off.APR}%</strong> · Tenure: <strong>{off.tenure}M</strong>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", marginBottom: 12 }}>
+                  EMI: ₹{off.EMI?.toLocaleString("en-IN")} / mo
+                </div>
+                <button className="btn btn-sm btn-primary w-full" onClick={() => onNavigate("my-offers")}>
+                  View Details & Select
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* My Active Loans */}
+      <div className="card">
+        <div className="section-header">
+          <div className="section-title">My Active Loans</div>
+          <span className="badge badge-muted">{safeLoans.length} Loans</span>
+        </div>
+        {safeLoans.length === 0 ? (
+          <div className="empty" style={{ padding: "20px 0" }}>
+            <div className="empty-text">No active loans found.</div>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>App ID</th>
+                  <th>Amount</th>
+                  <th>Purpose</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {safeLoans.map((l) => (
+                  <tr key={l.id}>
+                    <td><strong style={{ fontFamily: "var(--font-mono)" }}>{l.id}</strong></td>
+                    <td>₹{l.amount?.toLocaleString("en-IN")}</td>
+                    <td style={{ textTransform: "capitalize" }}>{l.purpose}</td>
+                    <td><span className="badge badge-green">{l.status}</span></td>
+                    <td>{new Date(l.createdAt).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ConsumerProfilePage({ user, onRefresh }) {
+  const [formData, setFormData] = useState({
+    fullName: user.fullName || "",
+    email: user.email || "",
+    mobile: user.mobile || "",
+    pan: user.pan || "",
+    dateOfBirth: user.dateOfBirth || "1994-08-15",
+    address: user.address || "102 Park Avenue, Koramangala, Bengaluru, KA",
+    employmentType: user.employmentType || "salaried",
+    employerName: user.employerName || "Tech Corp India",
+    monthlyIncome: user.monthlyIncome || 75000,
+    monthlyObligations: user.monthlyObligations || 15000,
+  });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const saveProfile = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api("/profile", { method: "PUT", body: JSON.stringify(formData) });
+      setMsg({ type: "success", text: "Profile updated successfully!" });
+      if (onRefresh) onRefresh();
+    } catch (ex) {
+      setMsg({ type: "error", text: ex.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pullBureau = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await api("/credit-profile/bureau-pull", {
+        method: "POST",
+        body: JSON.stringify({ pan: formData.pan }),
+      });
+      setMsg({ type: "success", text: `Bureau pull successful! Latest CIBIL score: ${res.bureauResult.cibilScore}` });
+      if (onRefresh) onRefresh();
+    } catch (ex) {
+      setMsg({ type: "error", text: ex.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card">
+      <div className="section-header mb-4">
+        <div>
+          <div className="section-title">Consumer Profile & KYC</div>
+          <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
+            Manage verified identity, employment, and income details (Aadhaar is never stored)
+          </div>
+        </div>
+        <button className="btn btn-sm btn-secondary" onClick={pullBureau} disabled={busy}>
+          📊 Pull Bureau Score (CIBIL)
+        </button>
+      </div>
+
+      {msg && (
+        <div className={msg.type === "error" ? "form-error mb-4" : "badge badge-green mb-4"} style={{ padding: "10px 14px", display: "block" }}>
+          {msg.text}
+        </div>
+      )}
+
+      <form onSubmit={saveProfile}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
+          <div className="form-group">
+            <label className="form-label">Full Name</label>
+            <input className="form-input" value={formData.fullName} onChange={(e) => setFormData({ ...formData, fullName: e.target.value })} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Email Address</label>
+            <input className="form-input" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Mobile Number</label>
+            <input className="form-input" value={formData.mobile} onChange={(e) => setFormData({ ...formData, mobile: e.target.value })} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">PAN Number</label>
+            <input className="form-input" value={formData.pan} onChange={(e) => setFormData({ ...formData, pan: e.target.value.toUpperCase() })} maxLength={10} required />
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>PAN is stored for bureau checks. Never Aadhaar.</div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Date of Birth</label>
+            <input className="form-input" type="date" value={formData.dateOfBirth} onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Employment Type</label>
+            <select className="form-input" value={formData.employmentType} onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })}>
+              <option value="salaried">Salaried</option>
+              <option value="self_employed">Self Employed</option>
+              <option value="business">Business Owner</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Employer Name</label>
+            <input className="form-input" value={formData.employerName} onChange={(e) => setFormData({ ...formData, employerName: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Monthly Net Income (₹)</label>
+            <input className="form-input" type="number" value={formData.monthlyIncome} onChange={(e) => setFormData({ ...formData, monthlyIncome: e.target.value })} required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Monthly Obligations / EMIs (₹)</label>
+            <input className="form-input" type="number" value={formData.monthlyObligations} onChange={(e) => setFormData({ ...formData, monthlyObligations: e.target.value })} required />
+          </div>
+        </div>
+
+        <div className="form-group" style={{ marginTop: 14 }}>
+          <label className="form-label">Residential Address</label>
+          <input className="form-input" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} required />
+        </div>
+
+        <div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end" }}>
+          <button className="btn btn-primary" type="submit" disabled={busy}>
+            {busy ? "Saving Profile..." : "Save Profile Details"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function GetCreditPage({ initialPurpose = "Electronics", onOffersFound }) {
+  const [purpose, setPurpose] = useState(initialPurpose);
+  const [requestedAmount, setRequestedAmount] = useState(80000);
+  const [preferredTenure, setPreferredTenure] = useState(12);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const categories = [
+    "Shopping", "Electronics", "Travel", "Healthcare", "Education", "Home Improvement", "Personal", "Other"
+  ];
+  const tenures = [3, 6, 12, 18, 24, 36];
+
+  const handleCreateIntent = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      const intent = await api("/loan-intents", {
+        method: "POST",
+        body: JSON.stringify({ purpose, requestedAmount: Number(requestedAmount), preferredTenure: Number(preferredTenure) }),
+      });
+      const res = await api(`/loan-intents/${intent.id}/find-offers`, { method: "POST" });
+      if (onOffersFound) onOffersFound(intent.id, res.offers);
+    } catch (ex) {
+      setErr(ex.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card" style={{ maxWidth: 700, margin: "0 auto" }}>
+      <div className="section-header mb-4">
+        <div>
+          <div className="section-title">Specify Consumption Credit Need</div>
+          <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
+            Define your loan purpose, amount, and tenure to receive pre-approved lender offers
+          </div>
+        </div>
+        <span className="badge badge-green">Marketplace Engine</span>
+      </div>
+
+      {err && <div className="form-error mb-4">{err}</div>}
+
+      <form onSubmit={handleCreateIntent}>
+        <div className="form-group mb-4">
+          <label className="form-label">Consumption Credit Purpose</label>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8, marginTop: 6 }}>
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                className={`btn btn-sm ${purpose === cat ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setPurpose(cat)}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="form-group mb-4">
+          <div className="flex justify-between items-center mb-1">
+            <label className="form-label">Required Amount (₹)</label>
+            <strong style={{ fontSize: 16, color: "var(--primary-text)" }}>₹{Number(requestedAmount).toLocaleString("en-IN")}</strong>
+          </div>
+          <input
+            type="range"
+            min={10000}
+            max={500000}
+            step={5000}
+            value={requestedAmount}
+            onChange={(e) => setRequestedAmount(e.target.value)}
+            style={{ width: "100%", margin: "8px 0" }}
+          />
+          <input
+            className="form-input"
+            type="number"
+            value={requestedAmount}
+            onChange={(e) => setRequestedAmount(e.target.value)}
+            min={5000}
+            max={1000000}
+            required
+          />
+        </div>
+
+        <div className="form-group mb-4">
+          <label className="form-label">Preferred Tenure (Months)</label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+            {tenures.map((t) => (
+              <button
+                key={t}
+                type="button"
+                className={`btn btn-sm ${preferredTenure === t ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => setPreferredTenure(t)}
+              >
+                {t} Months
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button className="btn btn-primary w-full" style={{ padding: "12px 18px", fontSize: 15 }} type="submit" disabled={busy}>
+          {busy ? "Finding Eligible Offers..." : "⚡ Find Matching Lender Offers"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function OffersComparisonPage({ intentId, onOfferSelected }) {
+  const [offers, setOffers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedKfs, setSelectedKfs] = useState(null);
+
+  const fetchOffers = async () => {
+    setLoading(true);
+    try {
+      let targetId = intentId;
+      if (!targetId) {
+        const intents = await api("/loan-intents").catch(() => []);
+        const safeIntents = Array.isArray(intents) ? intents : (intents?.intents || []);
+        if (safeIntents.length > 0) targetId = safeIntents[0].id;
+      }
+      if (targetId) {
+        const data = await api(`/loan-intents/${targetId}/offers`).catch(() => []);
+        setOffers(Array.isArray(data) ? data : (data?.offers || []));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOffers();
+  }, [intentId]);
+
+  const selectOffer = async (offerId) => {
+    try {
+      const res = await api(`/offers/${offerId}/select`, { method: "POST" });
+      setSelectedKfs(res.kfsData);
+      if (onOfferSelected) onOfferSelected(res);
+    } catch (ex) {
+      alert("Failed to select offer: " + ex.message);
+    }
+  };
+
+  return (
+    <div>
+      <div className="card mb-4">
+        <div className="section-header">
+          <div>
+            <div className="section-title">Eligible Credit Offers Comparison</div>
+            <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
+              Compare interest rates, APR, processing fees, and repayment terms transparently
+            </div>
+          </div>
+          <span className="badge badge-green">No Hidden Fees</span>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="card empty">
+          <div className="spinner" style={{ margin: "0 auto 10px" }} />
+          <div className="empty-text">Loading marketplace offers...</div>
+        </div>
+      ) : offers.length === 0 ? (
+        <div className="card empty">
+          <div className="empty-text">No offers generated for this intent yet. Create a credit need first.</div>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+          {offers.map((off) => (
+            <div key={off.id} className="card" style={{ border: "1px solid var(--border-color)", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div>
+                <div className="flex justify-between items-center mb-3">
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{off.lenderName}</div>
+                  <span className="badge badge-blue">{off.disbursalTime}</span>
+                </div>
+
+                <div style={{ fontSize: 26, fontWeight: 800, color: "var(--primary-text)", marginBottom: 12 }}>
+                  ₹{off.amount?.toLocaleString("en-IN")}
+                </div>
+
+                <div style={{ background: "var(--bg-surface-elevated)", padding: 12, borderRadius: "var(--radius-md)", marginBottom: 14 }}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: "var(--text-muted)" }}>Interest Rate:</span>
+                    <strong>{off.interestRate}% p.a.</strong>
+                  </div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: "var(--text-muted)" }}>APR (Annualized):</span>
+                    <strong>{off.APR}%</strong>
+                  </div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: "var(--text-muted)" }}>Monthly EMI:</span>
+                    <strong style={{ color: "var(--green)" }}>₹{off.EMI?.toLocaleString("en-IN")}</strong>
+                  </div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span style={{ color: "var(--text-muted)" }}>Processing Fee:</span>
+                    <span>₹{off.processingFee?.toLocaleString("en-IN")}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span style={{ color: "var(--text-muted)" }}>Total Repayment:</span>
+                    <span>₹{off.totalRepayment?.toLocaleString("en-IN")}</span>
+                  </div>
+                </div>
+
+                {off.eligibilityReasons && off.eligibilityReasons.length > 0 && (
+                  <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 14 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>Why you qualify:</div>
+                    {off.eligibilityReasons.map((r, i) => (
+                      <div key={i}>✓ {r}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button
+                className="btn btn-primary w-full"
+                onClick={() => selectOffer(off.id)}
+                disabled={off.status === "SELECTED"}
+              >
+                {off.status === "SELECTED" ? "✓ Offer Selected" : "Select Offer & Generate KFS"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {selectedKfs && (
+        <div className="card mt-4" style={{ border: "2px solid var(--green)" }}>
+          <div className="section-header mb-3">
+            <div className="section-title">✓ Key Fact Statement (KFS) Generated</div>
+            <span className="badge badge-green">RBI DL 2022 Mandate Compliant</span>
+          </div>
+          <pre style={{ background: "var(--bg-surface-elevated)", padding: 14, borderRadius: "var(--radius-md)", fontSize: 12, overflowX: "auto" }}>
+            {JSON.stringify(selectedKfs, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConsentsPage() {
+  const [consents, setConsents] = useState([]);
+
+  useEffect(() => {
+    api("/consents")
+      .then((res) => setConsents(Array.isArray(res) ? res : (res?.consents || [])))
+      .catch(() => setConsents([]));
+  }, []);
+
+  return (
+    <div className="card">
+      <div className="section-header mb-3">
+        <div>
+          <div className="section-title">Privacy & Consent Audit Trail</div>
+          <div className="section-subtitle" style={{ color: "var(--text-muted)", fontSize: 12 }}>
+            RBI Account Aggregator & Bureau Query consent logs (Revocable)
+          </div>
+        </div>
+        <span className="badge badge-green">Consent Governance</span>
+      </div>
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Consent ID</th>
+              <th>Type</th>
+              <th>Purpose</th>
+              <th>Provider</th>
+              <th>Status</th>
+              <th>Granted At</th>
+              <th>Expires At</th>
+            </tr>
+          </thead>
+          <tbody>
+            {consents.length === 0 ? (
+              <tr><td colSpan={7} style={{ textAlign: "center" }}>No consent logs found.</td></tr>
+            ) : (
+              consents.map((c) => (
+                <tr key={c.id}>
+                  <td><strong style={{ fontFamily: "var(--font-mono)" }}>{c.id}</strong></td>
+                  <td><span className="badge badge-blue">{c.consentType}</span></td>
+                  <td>{c.purpose}</td>
+                  <td>{c.provider}</td>
+                  <td><span className="badge badge-green">{c.status}</span></td>
+                  <td>{new Date(c.grantedAt).toLocaleDateString()}</td>
+                  <td>{new Date(c.expiresAt).toLocaleDateString()}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── APP SHELL ─────────────────────────────────────────────────────
 export default function App() {
   const [theme, toggleTheme] = useTheme();
@@ -2052,17 +3002,19 @@ export default function App() {
   const [bootLoading, setBootLoading] = useState(false);
   const [bootError, setBootError] = useState(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [activeIntentId, setActiveIntentId] = useState(null);
+  const [initialIntentPurpose, setInitialIntentPurpose] = useState("Electronics");
 
   const refreshAll = useCallback(async () => {
     setBootLoading(true);
     setBootError(null);
     try {
       const [apps, lnd] = await Promise.all([
-        api("/applications"),
-        api("/lenders"),
+        api("/applications").catch(() => []),
+        api("/lenders").catch(() => []),
       ]);
-      setApplications(apps);
-      setLenders(lnd);
+      setApplications(Array.isArray(apps) ? apps : (apps?.apps || apps?.applications || []));
+      setLenders(Array.isArray(lnd) ? lnd : (lnd?.lenders || []));
     } catch (e) {
       setBootError(e.message);
     } finally {
@@ -2114,9 +3066,19 @@ export default function App() {
   const role = auth.user.role;
 
   // Build role-scoped navigation items
-  const navItems = [
-    { id: "dashboard", icon: "⬡", label: "Overview" },
-  ];
+  const navItems = [];
+  if (role === "USER") {
+    navItems.push(
+      { id: "dashboard", icon: "⬡", label: "Overview" },
+      { id: "credit-profile", icon: "👤", label: "Credit Profile" },
+      { id: "get-credit", icon: "⚡", label: "Get Credit" },
+      { id: "my-offers", icon: "💎", label: "Credit Offers" },
+      { id: "my-loans", icon: "📑", label: "My Loans" },
+      { id: "my-consents", icon: "🛡️", label: "Consents & Privacy" }
+    );
+  } else {
+    navItems.push({ id: "dashboard", icon: "⬡", label: "Overview" });
+  }
 
   if (role === "DLA" || role === "ADMIN") {
     navItems.push(
@@ -2143,7 +3105,12 @@ export default function App() {
   navItems.push({ id: "lenders", icon: "🏦", label: "Lender Catalogue" });
 
   const pageMeta = {
-    dashboard: { title: "Marketplace Overview", subtitle: "Embedded credit routing & application hub" },
+    dashboard: { title: role === "USER" ? "Consumer Credit Dashboard" : "Marketplace Overview", subtitle: role === "USER" ? "Personalized consumption credit marketplace & credit profile" : "Embedded credit routing & application hub" },
+    "credit-profile": { title: "Credit Profile & Bureau Query", subtitle: "Manage verified identity, employment, & CIBIL score" },
+    "get-credit": { title: "Specify Credit Need", subtitle: "Select consumption category & loan parameters" },
+    "my-offers": { title: "Compare Credit Offers", subtitle: "Transparent interest rates, APR, processing fee & EMI" },
+    "my-loans": { title: "My Active Loans", subtitle: "Active credit contracts & Key Fact Statements (KFS)" },
+    "my-consents": { title: "Consent Audit Trail", subtitle: "RBI Account Aggregator & Bureau query governance logs" },
     "new-application": { title: "New Loan Application", subtitle: "Submit via DLA → AA Consent & Bureau query" },
     "credit-engine": { title: "Credit Engine", subtitle: "Eligibility matching & RBI Key Fact Statement (KFS)" },
     "routed-loans": { title: "Lender Portal — Disbursal", subtitle: "Verify KFS document & execute loan disbursal" },
@@ -2154,7 +3121,12 @@ export default function App() {
     lenders: { title: "Lender Catalogue", subtitle: "Onboarded regulated Banks & NBFCs" },
   };
 
-  const roleBadge = role === "ADMIN" ? "badge-green" : role === "LENDER" ? "badge-blue" : "badge-amber";
+  const roleBadge = role === "ADMIN" ? "badge-green" : role === "LENDER" ? "badge-blue" : role === "USER" ? "badge-green" : "badge-amber";
+
+  const handleNavigateConsumer = (targetPage, opts = {}) => {
+    if (opts.purpose) setInitialIntentPurpose(opts.purpose);
+    setPage(targetPage);
+  };
 
   return (
     <>
@@ -2197,7 +3169,7 @@ export default function App() {
               { icon: "⚡", label: "OCEN 4.0" },
               { icon: "💳", label: "eNACH AutoPay" },
             ].map((item) => (
-              <button key={item.label} className="nav-item" onClick={() => {}}>
+              <button key={item.label} className="nav-item" onClick={() => { }}>
                 <span className="nav-icon">{item.icon}</span>
                 {item.label}
               </button>
@@ -2255,7 +3227,32 @@ export default function App() {
               </div>
             ) : (
               <>
-                {page === "dashboard" && <DashboardPage applications={applications} user={auth.user} />}
+                {page === "dashboard" && (
+                  role === "USER" ? (
+                    <ConsumerDashboardPage user={auth.user} onNavigate={handleNavigateConsumer} />
+                  ) : (
+                    <DashboardPage applications={applications} user={auth.user} />
+                  )
+                )}
+                {page === "credit-profile" && <ConsumerProfilePage user={auth.user} onRefresh={refreshAll} />}
+                {page === "get-credit" && (
+                  <GetCreditPage
+                    initialPurpose={initialIntentPurpose}
+                    onOffersFound={(intentId) => {
+                      setActiveIntentId(intentId);
+                      setPage("my-offers");
+                    }}
+                  />
+                )}
+                {page === "my-offers" && (
+                  <OffersComparisonPage
+                    intentId={activeIntentId}
+                    onOfferSelected={() => refreshAll()}
+                  />
+                )}
+                {page === "my-loans" && <ConsumerDashboardPage user={auth.user} onNavigate={handleNavigateConsumer} />}
+                {page === "my-consents" && <ConsentsPage />}
+
                 {page === "new-application" && <NewApplicationPage onSubmit={handleNewApp} />}
                 {page === "credit-engine" && <CreditEnginePage applications={applications} lenders={lenders} onRoute={handleRoute} />}
                 {page === "routed-loans" && <RoutedLoansPage applications={applications} user={auth.user} onRefresh={refreshAll} />}
